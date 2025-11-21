@@ -1,26 +1,29 @@
 import streamlit as st
 import pandas as pd
-from fpdf import FPDF
-from datetime import datetime
-import tempfile
 import os
 
 # ==============================================================================
-# 1. DADOS PADRÃO CORRIGIDOS (IDÊNTICOS AO POWER BI FINAL)
+# 1. CONFIGURAÇÃO DA PÁGINA E ESTILO
 # ==============================================================================
+st.set_page_config(page_title="Simulador de Orçamento", page_icon="📊", layout="wide")
 
-st.set_page_config(page_title="Orçamentador Power BI", page_icon="📊", layout="wide")
+# CSS para deixar os cartões (KPIs) mais bonitos e parecidos com o Power BI
+st.markdown("""
+<style>
+    [data-testid="stMetricValue"] {
+        font-size: 24px;
+        color: #00CC96; /* Verde parecida com o Power BI */
+    }
+    [data-testid="stMetricLabel"] {
+        font-weight: bold;
+        color: #888888;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-FILES = {
-    "Materiais": "db_materiais.csv",
-    "MaoDeObra": "db_mdo.csv",
-    "Kits": "db_kits.csv",
-    "Config_Acionamentos": "db_conf_acion.csv",
-    "Config_Vasos": "db_conf_vasos.csv",
-    "Config_Hidraulica": "db_conf_hidra.csv"
-}
-
-# DADOS LIMPOS E COMPLETOS (Incluindo Kit 4V e novos itens)
+# ==============================================================================
+# 2. DADOS (BASE COMPLETA E CORRIGIDA)
+# ==============================================================================
 DEFAULT_DATA = {
     "Materiais": {
         'ID_Material': [
@@ -105,56 +108,47 @@ DEFAULT_DATA = {
     }
 }
 
-# POPULAR OS KITS (Incluindo o 4V que faltava)
+# POPULAR OS KITS (Incluindo o 4V)
 def add_k(idk, idm, qtd):
     DEFAULT_DATA["Kits"]['ID_Kit'].append(idk)
     DEFAULT_DATA["Kits"]['ID_Material'].append(idm)
     DEFAULT_DATA["Kits"]['Quantidade'].append(qtd)
 
-# KIT 4V COMPLETO
-kit4 = 'KIT-PAINEL-4V'
+# KIT 4V
 for m,q in [('CONT-MOT-12A',24),('RELE-INT-24V',24),('DISJ-MOT-10A',24),('DISJ-COM-02A',1),
             ('BORNE-SAK-4',160),('BORNE-TERRA',40),('CANALETA-6040',5),('TRILHO-DIN',6),
             ('FONTE-24V-2A',1),('SIN-LED-24V',8),('FIO-FLEX-1-5MM',2),('DPS-20KA-275V',1),
             ('TERMINAL-OLHAL-4MM',4),('ABRACADEIRA-20CM',2)]:
-    add_k(kit4, m, q)
+    add_k('KIT-PAINEL-4V', m, q)
 
-# KITS 1V, 2V, 3V (Resumidos para exemplo, adicione completos se quiser)
-add_k('KIT-PAINEL-1V', 'CONT-MOT-12A', 6); add_k('KIT-PAINEL-1V', 'RELE-INT-24V', 6)
-add_k('KIT-PAINEL-2V', 'CONT-MOT-12A', 12); add_k('KIT-PAINEL-2V', 'RELE-INT-24V', 12)
-add_k('KIT-PAINEL-3V', 'CONT-MOT-12A', 18); add_k('KIT-PAINEL-3V', 'RELE-INT-24V', 18)
+# KITS 1V, 2V, 3V (Simples para funcionamento)
+for m,q in [('CONT-MOT-12A',6),('RELE-INT-24V',6)]: add_k('KIT-PAINEL-1V', m, q)
+for m,q in [('CONT-MOT-12A',12),('RELE-INT-24V',12)]: add_k('KIT-PAINEL-2V', m, q)
+for m,q in [('CONT-MOT-12A',18),('RELE-INT-24V',18)]: add_k('KIT-PAINEL-3V', m, q)
 
-# KITS HIDRAULICOS (Exemplo do 48x72 100mm)
-kith = 'KIT-HID-4872-PV-100MM'
-for m,q in [('MEDIA-ZEO-25',40),('VALV-BORB-E4',6),('ZEO-SUP-34',2),('CREPINA-FIL-1',2),
-            ('CURVA-PVC-90-4',12),('TE-PVC-4',5),('BOLSA-FLG-4',12),('PARAF-INOX-M10',48),
-            ('COLA-AQUA-Tubo',1),('TUBO-PVC-4',2)]:
-    add_k(kith, m, q)
+# KITS HIDRAULICOS (Todos os 100mm)
+for k in ['KIT-HID-3672-PV-100MM', 'KIT-HID-4272-PV-100MM', 'KIT-HID-4872-PV-100MM', 'KIT-HID-6380-PV-100MM']:
+    for m,q in [('MEDIA-ZEO-25',40),('VALV-BORB-E4',6),('ZEO-SUP-34',2),('CURVA-PVC-90-4',12),
+                ('TE-PVC-4',5),('BOLSA-FLG-4',12),('PARAF-INOX-M10',48),('TUBO-PVC-4',2)]:
+        add_k(k, m, q)
+# KITS HIDRAULICOS (Todos os 50mm)
+for k in ['KIT-HID-3072-PV-50MM', 'KIT-HID-3672-PV-50MM']:
+    for m,q in [('MEDIA-ZEO-25',20),('VALV-BORB-E2',6),('CURVA-PVC-90-2',12),('TUBO-PVC-2',2)]:
+        add_k(k, m, q)
+# KITS HIDRAULICOS (Todos os 150mm)
+for k in ['KIT-HID-4272-PV-150MM', 'KIT-HID-4872-PV-150MM', 'KIT-HID-6380-PV-150MM']:
+    for m,q in [('MEDIA-ZEO-25',60),('VALV-BORB-E6',6),('CURVA-PVC-90-6',12),('TUBO-PVC-6',2)]:
+        add_k(k, m, q)
 
 
-# --- CARREGAMENTO DE DADOS ---
-def load_data():
-    dataframes = {}
-    for key, filename in FILES.items():
-        if os.path.exists(filename):
-            dataframes[key] = pd.read_csv(filename)
-        else:
-            df = pd.DataFrame(DEFAULT_DATA.get(key, {}))
-            df.to_csv(filename, index=False)
-            dataframes[key] = df
-    return dataframes
+# --- CARREGAR DATAFRAMES ---
+db = {k: pd.DataFrame(v) for k, v in DEFAULT_DATA.items()}
 
-def save_data(key, df):
-    df.to_csv(FILES[key], index=False)
-    st.success(f"Salvo em {FILES[key]}")
-
-db = load_data()
 
 # ==============================================================================
-# 2. CÁLCULO COM MULTI-MARGENS (IGUAL POWER BI)
+# 3. MOTOR DE CÁLCULO EM TEMPO REAL
 # ==============================================================================
-
-def calcular_orcamento_v3(num_vasos, tam_vaso, diametro, margens_dict):
+def calcular_orcamento(num_vasos, tam_vaso, diametro, margens_dict):
     df_mat = db["Materiais"]
     df_mdo = db["MaoDeObra"]
     df_kits = db["Kits"]
@@ -162,40 +156,39 @@ def calcular_orcamento_v3(num_vasos, tam_vaso, diametro, margens_dict):
     df_conf_vasos = db["Config_Vasos"]
     df_conf_hidra = db["Config_Hidraulica"]
 
-    # 1. Buscar Regras
+    # Regras
     try:
         regra_painel = df_conf_acion[df_conf_acion['Num_Vasos'] == num_vasos].iloc[0]
         regra_vaso = df_conf_vasos[df_conf_vasos['Descricao_Vaso'] == tam_vaso].iloc[0]
-        
         filtro_hid = (df_conf_hidra['Descricao_Vaso'] == tam_vaso) & (df_conf_hidra['ID_Diametro_mm'] == diametro)
-        if filtro_hid.sum() == 0: return None, "❌ Kit Hidráulico não encontrado para essa medida."
+        
+        if filtro_hid.sum() == 0: return None, "Combinação Inválida"
         
         id_kit_hidra = df_conf_hidra[filtro_hid].iloc[0]['ID_Kit_Hidraulico_p_Vaso']
         id_kit_painel = regra_painel['ID_Kit_Painel_Eletrico']
-    except Exception as e:
-        return None, f"Erro de Configuração: {str(e)}"
+    except:
+        return None, "Erro ao buscar regras"
 
     itens = []
-    # Itens Soltos
+    # 1. Itens Soltos
     itens.append({'ID': regra_painel['ID_Material_CLP'], 'Qtd': 1, 'Tipo': 'Material'})
     itens.append({'ID': regra_painel['ID_Material_Painel'], 'Qtd': 1, 'Tipo': 'Material'})
     itens.append({'ID': regra_painel['ID_Material_IHM'], 'Qtd': 1, 'Tipo': 'Material'})
     itens.append({'ID': regra_vaso['ID_Material_Vaso'], 'Qtd': num_vasos, 'Tipo': 'Material'})
 
-    # Kits
-    k_painel = df_kits[df_kits['ID_Kit'] == id_kit_painel]
-    for _, r in k_painel.iterrows(): itens.append({'ID': r['ID_Material'], 'Qtd': r['Quantidade'], 'Tipo': 'Material'})
-    
-    k_hidra = df_kits[df_kits['ID_Kit'] == id_kit_hidra]
-    for _, r in k_hidra.iterrows(): itens.append({'ID': r['ID_Material'], 'Qtd': r['Quantidade'] * num_vasos, 'Tipo': 'Material'})
+    # 2. Kits (Painel e Hidráulica)
+    for k, fator in [(id_kit_painel, 1), (id_kit_hidra, num_vasos)]:
+        for _, r in df_kits[df_kits['ID_Kit'] == k].iterrows():
+            itens.append({'ID': r['ID_Material'], 'Qtd': r['Quantidade'] * fator, 'Tipo': 'Material'})
 
-    # Mão de Obra
+    # 3. Mão de Obra
     itens.append({'ID': 'MDO-MONT-ELET', 'Qtd': regra_painel['Horas_MDO_Mont_Elet'], 'Tipo': 'MDO'})
     itens.append({'ID': 'MDO-PROG-CLP', 'Qtd': regra_painel['Horas_MDO_Prog_CLP'], 'Tipo': 'MDO'})
     itens.append({'ID': 'MDO-MONT-HIDR', 'Qtd': regra_vaso['Horas_MDO_Hidr_p_Vaso'] * num_vasos, 'Tipo': 'MDO'})
 
     resultado = []
-    total_geral = 0
+    custo_total_projeto = 0
+    venda_total_projeto = 0
 
     for item in itens:
         if item['Tipo'] == 'Material':
@@ -210,107 +203,99 @@ def calcular_orcamento_v3(num_vasos, tam_vaso, diametro, margens_dict):
             grupo = "Mão de Obra"
             custo = float(dado.iloc[0]['Custo_Hora'])
 
-        # APLICAR MARGEM ESPECÍFICA DO GRUPO (IGUAL POWER BI)
-        margem_aplicada = margens_dict.get(grupo, 0.5) # Padrão 50% se não achar
-
-        preco_venda = custo * (1 + margem_aplicada) * item['Qtd']
+        margem = margens_dict.get(grupo, 0.5)
         
+        total_custo = custo * item['Qtd']
+        total_venda = total_custo * (1 + margem)
+
         resultado.append({
-            'ID': item['ID'], 'Descrição': desc, 'Grupo': grupo, 'Qtd': item['Qtd'],
-            'Custo Unit': custo, 'Margem': f"{margem_aplicada*100:.0f}%", 'Total Venda': preco_venda
+            'Descrição': desc,
+            'Grupo': grupo,
+            'Qtd': item['Qtd'],
+            'Custo Unit': custo,
+            'Preço Venda': total_venda
         })
-        total_geral += preco_venda
+        
+        custo_total_projeto += total_custo
+        venda_total_projeto += total_venda
 
-    return pd.DataFrame(resultado), total_geral
+    df_final = pd.DataFrame(resultado)
+    return df_final, custo_total_projeto, venda_total_projeto
 
 # ==============================================================================
-# 3. INTERFACE
+# 4. INTERFACE VISUAL (REPLICAÇÃO DO PRINT)
 # ==============================================================================
 
-tab1, tab2 = st.tabs(["📊 Orçamento Power BI", "🛠️ Editor de Dados"])
+st.title("Simulador de Orçamento")
 
-with tab1:
-    st.header("Simulador de Orçamento")
-    
-    # --- MENU DE CONFIGURAÇÃO ---
-    c1, c2, c3 = st.columns(3)
-    with c1: vaso_sel = st.selectbox("Nº Vasos", [1,2,3,4], index=3)
-    with c2: tam_sel = st.selectbox("Tamanho", db["Config_Vasos"]['Descricao_Vaso'].unique(), index=3)
-    with c3: diam_sel = st.selectbox("Diâmetro", [50, 100, 150], index=1)
+# --- 1. FILTROS SUPERIORES (3 COLUNAS) ---
+# Não usamos st.sidebar para ficar igual ao print
+c1, c2, c3 = st.columns(3)
+
+with c1:
+    sel_vasos = st.selectbox("Nº de Vasos", [1, 2, 3, 4], index=3)
+
+with c2:
+    sel_tamanho = st.selectbox("Tamanho do Vaso", db["Config_Vasos"]['Descricao_Vaso'].unique(), index=3)
+
+with c3:
+    sel_diametro = st.selectbox("Diâmetro da Tubulação", db["Config_Hidraulica"]['ID_Diametro_mm'].unique(), index=1)
+
+st.divider()
+
+# --- 2. SLIDERS DE MARGEM (LINHA ÚNICA) ---
+st.caption("Parâmetros de Margem de Lucro (%)")
+m1, m2, m3, m4, m5 = st.columns(5)
+
+# Valores iniciais padrão 50% (0.50)
+margem_clp = m1.slider("Margem CLP", 0, 100, 50) / 100
+margem_hidra = m2.slider("Margem Hidráulica", 0, 100, 50) / 100
+margem_painel = m3.slider("Margem Painel", 0, 100, 50) / 100
+margem_mdo = m4.slider("Margem MDO", 0, 100, 50) / 100
+margem_vasos = m5.slider("Margem Vasos", 0, 100, 50) / 100
+
+# Monta o dicionário para o cálculo
+MARGENS = {
+    "CLP": margem_clp,
+    "Hidráulica": margem_hidra,
+    "Itens de Painel": margem_painel,
+    "Mão de Obra": margem_mdo,
+    "Vasos": margem_vasos
+}
+
+# --- 3. CÁLCULO AUTOMÁTICO (SEM BOTÃO) ---
+# O Streamlit roda o script inteiro sempre que um selectbox ou slider muda.
+# Então o cálculo acontece em tempo real aqui:
+
+df_resultado, custo_total, venda_total = calcular_orcamento(sel_vasos, sel_tamanho, sel_diametro, MARGENS)
+
+if df_resultado is None:
+    st.error("❌ Combinação de Tamanho de Vaso e Diâmetro não cadastrada no sistema.")
+else:
+    # Cálculos Finais
+    margem_reais = venda_total - custo_total
+    margem_percentual = (margem_reais / custo_total) * 100 if custo_total > 0 else 0
+
+    # --- 4. CARTÕES DE KPI (4 COLUNAS) ---
+    k1, k2, k3, k4 = st.columns(4)
+
+    k1.metric("Preço de Venda Total", f"R$ {venda_total:,.2f}")
+    k2.metric("Custo Total Projeto", f"R$ {custo_total:,.2f}")
+    k3.metric("Margem Total (R$)", f"R$ {margem_reais:,.2f}")
+    k4.metric("Margem %", f"{margem_percentual:.1f}%")
 
     st.divider()
+
+    # --- 5. TABELA DETALHADA ---
+    st.subheader("Detalhamento dos Itens")
     
-    # --- SLIDERS DE MARGEM (O PEDIDO PRINCIPAL) ---
-    st.subheader("Margens de Lucro por Categoria")
-    cm1, cm2, cm3, cm4, cm5 = st.columns(5)
+    # Formatação para exibição
+    df_show = df_resultado.copy()
+    df_show['Custo Unit'] = df_show['Custo Unit'].map('R$ {:,.2f}'.format)
+    df_show['Preço Venda'] = df_show['Preço Venda'].map('R$ {:,.2f}'.format)
     
-    # Padrões do Power BI (50%)
-    m_clp = cm1.slider("CLP %", 0, 200, 50) / 100
-    m_painel = cm2.slider("Painel %", 0, 200, 50) / 100
-    m_hidra = cm3.slider("Hidráulica %", 0, 200, 50) / 100
-    m_vasos = cm4.slider("Vasos %", 0, 200, 50) / 100
-    m_mdo = cm5.slider("Mão de Obra %", 0, 200, 50) / 100
-
-    # Dicionário para passar à função
-    MARGENS = {
-        "CLP": m_clp,
-        "Itens de Painel": m_painel,
-        "Hidráulica": m_hidra,
-        "Vasos": m_vasos,
-        "Mão de Obra": m_mdo
-    }
-
-    if st.button("CALCULAR ORÇAMENTO", type="primary"):
-        df_res, total = calcular_orcamento_v3(vaso_sel, tam_sel, diam_sel, MARGENS)
-        
-        if isinstance(total, str):
-            st.error(total)
-        else:
-            st.success(f"### VALOR TOTAL: R$ {total:,.2f}")
-            
-            # Mostra Tabela Bonita
-            st.dataframe(df_res[['Descrição', 'Grupo', 'Qtd', 'Margem', 'Total Venda']], use_container_width=True)
-
-            # Gerar PDF
-            class PDF(FPDF):
-                def header(self):
-                    self.set_font('Arial', 'B', 14)
-                    self.cell(0, 10, 'Orcamento Comercial Detalhado', 0, 1, 'C')
-                    self.ln(5)
-            
-            pdf = PDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=10)
-            pdf.cell(0, 6, f"Data: {datetime.now().strftime('%d/%m/%Y')}", 0, 1)
-            pdf.cell(0, 6, f"Config: {vaso_sel} Vasos | {tam_sel} | {diam_sel}mm", 0, 1)
-            pdf.ln(5)
-            
-            # Tabela PDF
-            pdf.set_fill_color(200, 220, 255)
-            pdf.cell(90, 8, "Descricao", 1, 0, 'L', 1)
-            pdf.cell(30, 8, "Grupo", 1, 0, 'C', 1)
-            pdf.cell(20, 8, "Qtd", 1, 0, 'C', 1)
-            pdf.cell(40, 8, "Total (R$)", 1, 1, 'R', 1)
-            
-            for _, r in df_res.iterrows():
-                pdf.cell(90, 7, str(r['Descrição'])[0:45], 1)
-                pdf.cell(30, 7, str(r['Grupo'])[0:15], 1, 0, 'C')
-                pdf.cell(20, 7, str(r['Qtd']), 1, 0, 'C')
-                pdf.cell(40, 7, f"{r['Total Venda']:,.2f}", 1, 1, 'R')
-                
-            pdf.ln(5)
-            pdf.set_font("Arial", 'B', 12)
-            pdf.cell(0, 10, f"TOTAL GERAL: R$ {total:,.2f}", 0, 1, 'R')
-            
-            temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-            pdf.output(temp.name)
-            with open(temp.name, "rb") as f:
-                st.download_button("📥 Baixar PDF", f, "orcamento.pdf", mime="application/pdf")
-
-with tab2:
-    st.info("Edite os dados base aqui.")
-    op = st.selectbox("Tabela", list(FILES.keys()))
-    df_ed = st.data_editor(db[op], num_rows="dynamic", use_container_width=True)
-    if st.button("Salvar Alterações"):
-        save_data(op, df_ed)
-        st.rerun()
+    st.dataframe(
+        df_show[['Descrição', 'Grupo', 'Qtd', 'Custo Unit', 'Preço Venda']],
+        use_container_width=True,
+        height=500 # Altura fixa para parecer uma lista longa
+    )
