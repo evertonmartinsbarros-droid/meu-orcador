@@ -233,11 +233,25 @@ tab_dash, tab_config = st.tabs(["📊 Dashboard de Orçamento", "⚙️ Configur
 with tab_dash:
     st.title("Simulador de Orçamento")
     
-    # 1. Filtros
+    # 1. Filtros (COM PROTEÇÃO DE ÍNDICE)
     c1, c2, c3 = st.columns(3)
-    with c1: sel_vasos = st.selectbox("Nº de Vasos", [1, 2, 3, 4], index=3)
-    with c2: sel_tamanho = st.selectbox("Tamanho do Vaso", db["Config_Vasos"]['Descricao_Vaso'].unique(), index=3)
-    with c3: sel_diametro = st.selectbox("Diâmetro Tubulação", db["Config_Hidraulica"]['ID_Diametro_mm'].unique(), index=1)
+    
+    with c1: 
+        opcoes_vasos = [1, 2, 3, 4]
+        # Seleciona o ultimo (3) se existir, senão 0
+        idx_vasos = 3 if len(opcoes_vasos) > 3 else 0
+        sel_vasos = st.selectbox("Nº de Vasos", opcoes_vasos, index=idx_vasos)
+
+    with c2: 
+        opcoes_tamanho = db["Config_Vasos"]['Descricao_Vaso'].unique()
+        idx_tamanho = 3 if len(opcoes_tamanho) > 3 else 0
+        sel_tamanho = st.selectbox("Tamanho do Vaso", opcoes_tamanho, index=idx_tamanho)
+
+    with c3: 
+        opcoes_diametro = db["Config_Hidraulica"]['ID_Diametro_mm'].unique()
+        # Seleciona o segundo (1) se existir, senão 0
+        idx_diametro = 1 if len(opcoes_diametro) > 1 else 0
+        sel_diametro = st.selectbox("Diâmetro Tubulação", opcoes_diametro, index=idx_diametro)
     
     st.divider()
     
