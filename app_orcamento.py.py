@@ -30,7 +30,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. GERENCIAMENTO DE DADOS (CARREGAR E SALVAR)
+# 2. GERENCIAMENTO DE DADOS
 # ==============================================================================
 FILES = {
     "Materiais": "db_materiais.csv",
@@ -41,7 +41,7 @@ FILES = {
     "Config_Hidraulica": "db_conf_hidra.csv"
 }
 
-# DADOS PADRÃO (Caso não existam arquivos)
+# DADOS PADRÃO (Para restaurar se necessário)
 DEFAULT_DATA = {
     "Materiais": {
         'ID_Material': [
@@ -152,7 +152,13 @@ def load_data():
     dataframes = {}
     for key, filename in FILES.items():
         if os.path.exists(filename):
-            dataframes[key] = pd.read_csv(filename)
+            try:
+                dataframes[key] = pd.read_csv(filename)
+            except:
+                # Se der erro ao ler (arquivo vazio ou corrompido), recria
+                df = pd.DataFrame(DEFAULT_DATA.get(key, {}))
+                df.to_csv(filename, index=False)
+                dataframes[key] = df
         else:
             df = pd.DataFrame(DEFAULT_DATA.get(key, {}))
             df.to_csv(filename, index=False)
@@ -180,48 +186,55 @@ def calcular_orcamento(num_vasos, tam_vaso, diametro, margens_dict):
     try:
         regra_painel = df_conf_acion[df_conf_acion['Num_Vasos'] == num_vasos].iloc[0]
         regra_vaso = df_conf_vasos[df_conf_vasos['Descricao_Vaso'] == tam_vaso].iloc[0]
+        
+        # Filtro Hidráulico
         filtro_hid = (df_conf_hidra['Descricao_Vaso'] == tam_vaso) & (df_conf_hidra['ID_Diametro_mm'] == diametro)
         
-        if filtro_hid.sum() == 0: return None, "Combinação de Vaso e Diâmetro não cadastrada."
+        # CORREÇÃO DO ERRO: Se não achar a combinação, retorna 3 valores (None, 0, 0)
+        if filtro_hid.sum() == 0: 
+            return None, 0, 0
+            
         id_kit_hidra = df_conf_hidra[filtro_hid].iloc[0]['ID_Kit_Hidraulico_p_Vaso']
         id_kit_painel = regra_painel['ID_Kit_Painel_Eletrico']
-    except:
-        return None, "Erro ao buscar configurações."
 
-    itens = []
-    # Soltos
-    itens.append({'ID': regra_painel['ID_Material_CLP'], 'Qtd': 1, 'Tipo': 'Material'})
-    itens.append({'ID': regra_painel['ID_Material_Painel'], 'Qtd': 1, 'Tipo': 'Material'})
-    itens.append({'ID': regra_painel['ID_Material_IHM'], 'Qtd': 1, 'Tipo': 'Material'})
-    itens.append({'ID': regra_vaso['ID_Material_Vaso'], 'Qtd': num_vasos, 'Tipo': 'Material'})
-    # Kits
-    for k, f in [(id_kit_painel, 1), (id_kit_hidra, num_vasos)]:
-        for _, r in df_kits[df_kits['ID_Kit'] == k].iterrows():
-            itens.append({'ID': r['ID_Material'], 'Qtd': r['Quantidade'] * f, 'Tipo': 'Material'})
-    # MDO
-    itens.append({'ID': 'MDO-MONT-ELET', 'Qtd': regra_painel['Horas_MDO_Mont_Elet'], 'Tipo': 'MDO'})
-    itens.append({'ID': 'MDO-PROG-CLP', 'Qtd': regra_painel['Horas_MDO_Prog_CLP'], 'Tipo': 'MDO'})
-    itens.append({'ID': 'MDO-MONT-HIDR', 'Qtd': regra_vaso['Horas_MDO_Hidr_p_Vaso'] * num_vasos, 'Tipo': 'MDO'})
+        itens = []
+        # Soltos
+        itens.append({'ID': regra_painel['ID_Material_CLP'], 'Qtd': 1, 'Tipo': 'Material'})
+        itens.append({'ID': regra_painel['ID_Material_Painel'], 'Qtd': 1, 'Tipo': 'Material'})
+        itens.append({'ID': regra_painel['ID_Material_IHM'], 'Qtd': 1, 'Tipo': 'Material'})
+        itens.append({'ID': regra_vaso['ID_Material_Vaso'], 'Qtd': num_vasos, 'Tipo': 'Material'})
+        # Kits
+        for k, f in [(id_kit_painel, 1), (id_kit_hidra, num_vasos)]:
+            for _, r in df_kits[df_kits['ID_Kit'] == k].iterrows():
+                itens.append({'ID': r['ID_Material'], 'Qtd': r['Quantidade'] * f, 'Tipo': 'Material'})
+        # MDO
+        itens.append({'ID': 'MDO-MONT-ELET', 'Qtd': regra_painel['Horas_MDO_Mont_Elet'], 'Tipo': 'MDO'})
+        itens.append({'ID': 'MDO-PROG-CLP', 'Qtd': regra_painel['Horas_MDO_Prog_CLP'], 'Tipo': 'MDO'})
+        itens.append({'ID': 'MDO-MONT-HIDR', 'Qtd': regra_vaso['Horas_MDO_Hidr_p_Vaso'] * num_vasos, 'Tipo': 'MDO'})
 
-    res, custo_tot, venda_tot = [], 0, 0
-    for item in itens:
-        if item['Tipo'] == 'Material':
-            d = df_mat[df_mat['ID_Material'] == item['ID']]
-            if d.empty: continue
-            desc, grp, cust = d.iloc[0]['Descricao'], d.iloc[0]['Grupo_Orcamento'], float(d.iloc[0]['Preco_Custo'])
-        else:
-            d = df_mdo[df_mdo['ID_MaoDeObra'] == item['ID']]
-            desc, grp, cust = d.iloc[0]['Tipo_Servico'], "Mão de Obra", float(d.iloc[0]['Custo_Hora'])
+        res, custo_tot, venda_tot = [], 0, 0
+        for item in itens:
+            if item['Tipo'] == 'Material':
+                d = df_mat[df_mat['ID_Material'] == item['ID']]
+                if d.empty: continue
+                desc, grp, cust = d.iloc[0]['Descricao'], d.iloc[0]['Grupo_Orcamento'], float(d.iloc[0]['Preco_Custo'])
+            else:
+                d = df_mdo[df_mdo['ID_MaoDeObra'] == item['ID']]
+                desc, grp, cust = d.iloc[0]['Tipo_Servico'], "Mão de Obra", float(d.iloc[0]['Custo_Hora'])
 
-        mrg = margens_dict.get(grp, 0.5)
-        tot_cust = cust * item['Qtd']
-        tot_vend = tot_cust * (1 + mrg)
-        
-        res.append({'Descrição': desc, 'Grupo': grp, 'Qtd': item['Qtd'], 'Custo Unit': cust, 'Preço Venda': tot_vend})
-        custo_tot += tot_cust
-        venda_tot += tot_vend
+            mrg = margens_dict.get(grp, 0.5)
+            tot_cust = cust * item['Qtd']
+            tot_vend = tot_cust * (1 + mrg)
+            
+            res.append({'Descrição': desc, 'Grupo': grp, 'Qtd': item['Qtd'], 'Custo Unit': cust, 'Preço Venda': tot_vend})
+            custo_tot += tot_cust
+            venda_tot += tot_vend
 
-    return pd.DataFrame(res), custo_tot, venda_tot
+        return pd.DataFrame(res), custo_tot, venda_tot
+
+    except Exception as e:
+        # Se der qualquer outro erro, também retorna 3 valores para não quebrar o app
+        return None, 0, 0
 
 # ==============================================================================
 # 4. INTERFACE PRINCIPAL (ABAS)
@@ -233,11 +246,25 @@ tab_dash, tab_config = st.tabs(["📊 Dashboard de Orçamento", "⚙️ Configur
 with tab_dash:
     st.title("Simulador de Orçamento")
     
-    # 1. Filtros
+    # 1. Filtros (COM PROTEÇÃO DE ÍNDICE)
     c1, c2, c3 = st.columns(3)
-    with c1: sel_vasos = st.selectbox("Nº de Vasos", [1, 2, 3, 4], index=3)
-    with c2: sel_tamanho = st.selectbox("Tamanho do Vaso", db["Config_Vasos"]['Descricao_Vaso'].unique(), index=3)
-    with c3: sel_diametro = st.selectbox("Diâmetro Tubulação", db["Config_Hidraulica"]['ID_Diametro_mm'].unique(), index=1)
+    
+    with c1: 
+        opcoes_vasos = [1, 2, 3, 4]
+        idx_vasos = 3 if len(opcoes_vasos) > 3 else 0
+        sel_vasos = st.selectbox("Nº de Vasos", opcoes_vasos, index=idx_vasos)
+
+    with c2: 
+        opcoes_tamanho = db["Config_Vasos"]['Descricao_Vaso'].unique()
+        # Tenta pegar o índice 3, senão 0
+        idx_tamanho = 3 if len(opcoes_tamanho) > 3 else 0
+        sel_tamanho = st.selectbox("Tamanho do Vaso", opcoes_tamanho, index=idx_tamanho)
+
+    with c3: 
+        opcoes_diametro = db["Config_Hidraulica"]['ID_Diametro_mm'].unique()
+        # Tenta pegar o índice 1, senão 0
+        idx_diametro = 1 if len(opcoes_diametro) > 1 else 0
+        sel_diametro = st.selectbox("Diâmetro Tubulação", opcoes_diametro, index=idx_diametro)
     
     st.divider()
     
@@ -256,7 +283,7 @@ with tab_dash:
     df_res, custo_total, venda_total = calcular_orcamento(sel_vasos, sel_tamanho, sel_diametro, MARGENS)
     
     if df_res is None:
-        st.error("❌ Configuração inválida.")
+        st.error(f"❌ Combinação Inválida: Não existe kit hidráulico cadastrado para Vaso {sel_tamanho} com tubo de {sel_diametro}mm.")
     else:
         margem_reais = venda_total - custo_total
         margem_pct = (margem_reais / custo_total * 100) if custo_total > 0 else 0
@@ -276,7 +303,7 @@ with tab_dash:
         df_show['Preço Venda'] = df_show['Preço Venda'].map('R$ {:,.2f}'.format)
         st.dataframe(df_show, use_container_width=True, height=400)
         
-        # 5. BOTÃO GERAR PDF (NOVO!)
+        # 5. BOTÃO GERAR PDF
         st.write("")
         col_btn_L, col_btn_R = st.columns([4, 1])
         with col_btn_R:
