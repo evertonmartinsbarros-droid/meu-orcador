@@ -4,25 +4,64 @@ from fpdf import FPDF
 from datetime import datetime, timedelta
 import tempfile
 import os
+import plotly.express as px  # Nova biblioteca para gráficos bonitos
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO E ESTILO
+# 1. CONFIGURAÇÃO E ESTILO (DESIGN MODERNO)
 # ==============================================================================
 st.set_page_config(page_title="Gerador de Propostas", page_icon="💼", layout="wide")
 
 st.markdown("""
 <style>
-    /* Estilo dos Cartões (KPIs) */
-    [data-testid="stMetricValue"] {
-        font-size: 26px;
-        color: #00CC96;
-        font-weight: bold;
+    /* Fundo geral levemente cinza para destacar os cartões */
+    .stApp {
+        background-color: #F8F9FA;
     }
+
+    /* Estilo dos Cartões de Métricas (KPIs) */
+    div[data-testid="stMetric"] {
+        background-color: #FFFFFF;
+        border: 1px solid #E0E0E0;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        transition: 0.3s;
+    }
+    
+    /* Efeito ao passar o mouse nos cartões */
+    div[data-testid="stMetric"]:hover {
+        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+        border-color: #00CC96;
+        transform: translateY(-2px);
+    }
+
+    /* Cores e fontes dos números */
+    [data-testid="stMetricValue"] {
+        font-size: 28px;
+        color: #00CC96;
+        font-weight: 700;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 15px;
+        color: #6c757d;
+        font-weight: 500;
+    }
+
+    /* Botões mais bonitos */
     .stButton button {
         width: 100%;
-        font-weight: bold;
+        border-radius: 8px;
+        font-weight: 600;
+        padding-top: 10px;
+        padding-bottom: 10px;
     }
-    .stDataFrame { border: 1px solid #ddd; }
+    
+    /* Ajuste da Tabela */
+    .stDataFrame { 
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        overflow: hidden;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -33,7 +72,6 @@ if 'admin_logged_in' not in st.session_state:
     st.session_state.admin_logged_in = False
 
 def check_login(user, password):
-    # --- SENHA PADRÃO: admin / 1234 ---
     if user == "admin" and password == "1234":
         st.session_state.admin_logged_in = True
         st.rerun()
@@ -118,7 +156,7 @@ def save_data(key, df):
 db = load_data()
 
 # ==============================================================================
-# 4. CLASSE PDF (CORRIGIDA)
+# 4. CLASSE PDF (Profissional)
 # ==============================================================================
 class PropostaPDF(FPDF):
     def __init__(self, empresa_dados, cliente_dados, logo_path=None):
@@ -128,14 +166,13 @@ class PropostaPDF(FPDF):
         self.logo_path = logo_path
 
     def header(self):
-        # AQUI ESTAVA O ERRO - O HEADER É CHAMADO AUTOMATICAMENTE PELO ADD_PAGE
-        # Só desenha se for página 1
+        # Apenas na primeira página
         if self.page_no() == 1:
             if self.logo_path:
                 try: self.image(self.logo_path, 10, 8, 33)
                 except: pass
             
-            # Dados da Empresa
+            # Dados Empresa
             self.set_font('Arial', 'B', 12)
             self.cell(0, 5, self.empresa['nome'], 0, 1, 'R')
             self.set_font('Arial', '', 9)
@@ -211,7 +248,7 @@ class PropostaPDF(FPDF):
         self.cell(95, 5, "De Acordo (Cliente)", 0, 1, 'C')
 
 # ==============================================================================
-# 5. LÓGICA DE CÁLCULO
+# 5. CÁLCULO
 # ==============================================================================
 def calcular_itens(num_vasos, tam_vaso, diametro, margens_dict):
     try:
@@ -226,17 +263,20 @@ def calcular_itens(num_vasos, tam_vaso, diametro, margens_dict):
         id_kit_painel = regra_painel['ID_Kit_Painel_Eletrico']
 
         itens = []
+        # Base
         itens.append({'ID': regra_painel['ID_Material_CLP'], 'Qtd': 1, 'Tipo': 'Material'})
         itens.append({'ID': regra_painel['ID_Material_Painel'], 'Qtd': 1, 'Tipo': 'Material'})
         itens.append({'ID': regra_painel['ID_Material_IHM'], 'Qtd': 1, 'Tipo': 'Material'})
         itens.append({'ID': regra_vaso['ID_Material_Vaso'], 'Qtd': num_vasos, 'Tipo': 'Material'})
         
+        # Kits
         df_kits = db["Kits"]
         for k, f in [(id_kit_painel, 1), (id_kit_hidra, num_vasos)]:
             k_itens = df_kits[df_kits['ID_Kit'] == k]
             for _, r in k_itens.iterrows():
                 itens.append({'ID': r['ID_Material'], 'Qtd': r['Quantidade'] * f, 'Tipo': 'Material'})
 
+        # MDO
         itens.append({'ID': 'MDO-MONT-ELET', 'Qtd': regra_painel['Horas_MDO_Mont_Elet'], 'Tipo': 'MDO'})
         itens.append({'ID': 'MDO-PROG-CLP', 'Qtd': regra_painel['Horas_MDO_Prog_CLP'], 'Tipo': 'MDO'})
         itens.append({'ID': 'MDO-MONT-HIDR', 'Qtd': regra_vaso['Horas_MDO_Hidr_p_Vaso'] * num_vasos, 'Tipo': 'MDO'})
@@ -270,88 +310,73 @@ def calcular_itens(num_vasos, tam_vaso, diametro, margens_dict):
         return None
 
 # ==============================================================================
-# 6. INTERFACE COM LOGIN
+# 6. INTERFACE
 # ==============================================================================
 
-# --- SIDEBAR: LOGIN & CONFIG ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("🔐 Acesso Administrativo")
+    st.title("🛡️ Admin")
     
     if not st.session_state.admin_logged_in:
         u = st.text_input("Usuário")
         p = st.text_input("Senha", type="password")
-        if st.button("Entrar"):
-            check_login(u, p)
+        if st.button("Entrar"): check_login(u, p)
     else:
-        st.success("Modo Admin Ativo")
-        if st.button("Sair (Logout)"): logout()
-        
+        st.success("Logado como Admin")
+        if st.button("Sair"): logout()
         st.divider()
-        st.header("🏢 Dados da Empresa")
-        emp_logo = st.file_uploader("Logotipo", type=['png', 'jpg', 'jpeg'])
-        if emp_logo: st.image(emp_logo, caption="Logo Atual", use_container_width=True)
+        st.header("Empresa")
+        emp_logo = st.file_uploader("Logo", type=['png', 'jpg'])
+        if emp_logo: st.image(emp_logo, caption="Logo", use_container_width=True)
+        with st.expander("Dados", expanded=False):
+            emp_nome = st.text_input("Nome", "Sua Empresa")
+            emp_end = st.text_input("Endereço", "Rua...")
+            emp_tel = st.text_input("Tel", "...")
+            emp_email = st.text_input("Email", "...")
+            emp_site = st.text_input("Site", "...")
+        st.divider()
+        if st.button("⚠️ Resetar Tudo"): load_data(True); st.rerun()
 
-        with st.expander("Cabeçalho PDF", expanded=False):
-            emp_nome = st.text_input("Nome", "Sua Empresa Ltda")
-            emp_end = st.text_input("Endereço", "Rua Exemplo, 123")
-            emp_tel = st.text_input("Tel", "(11) 99999-9999")
-            emp_email = st.text_input("Email", "contato@empresa.com")
-            emp_site = st.text_input("Site", "www.empresa.com")
-        
-        st.divider()
-        st.header("⚠️ Zona de Perigo")
-        if 'reset_confirm' not in st.session_state: st.session_state.reset_confirm = False
-        if st.button("Restaurar Padrão"): st.session_state.reset_confirm = True
-        if st.session_state.reset_confirm:
-            st.warning("Confirmar?")
-            c1, c2 = st.columns(2)
-            if c1.button("SIM"): load_data(True); st.session_state.reset_confirm = False; st.rerun()
-            if c2.button("NÃO"): st.session_state.reset_confirm = False; st.rerun()
-    
     if not st.session_state.admin_logged_in:
-        emp_logo = None
-        emp_nome = "Sua Empresa"
-        emp_end, emp_tel, emp_email, emp_site = "", "", "", ""
+        emp_logo, emp_nome, emp_end, emp_tel, emp_email, emp_site = None, "Empresa", "", "", "", ""
 
-# --- CONTROLE DE ABAS ---
+# --- TABS ---
 if st.session_state.admin_logged_in:
-    tab_dash, tab_kits, tab_db = st.tabs(["📊 Gerador de Proposta", "🛠️ Editor de Kits", "🗃️ Banco de Preços"])
+    tab_dash, tab_kits, tab_db = st.tabs(["📊 Dashboard & Proposta", "🛠️ Kits", "🗃️ Dados"])
 else:
-    tab_dash, = st.tabs(["📊 Gerador de Proposta"])
+    tab_dash, = st.tabs(["📊 Dashboard & Proposta"])
 
-# ---------------- ABA DASHBOARD (PÚBLICA) ----------------
+# --- DASHBOARD ---
 with tab_dash:
     st.title("Gerador de Proposta Comercial")
     
     c1, c2, c3 = st.columns(3)
     with c1: sel_vasos = st.selectbox("Nº Vasos", [1,2,3,4], index=3)
-    with c2: sel_tamanho = st.selectbox("Tamanho Vaso", db["Config_Vasos"]['Descricao_Vaso'].unique(), index=3)
-    with c3: sel_diametro = st.selectbox("Diâmetro Tubo", db["Config_Hidraulica"]['ID_Diametro_mm'].unique(), index=1)
+    with c2: sel_tamanho = st.selectbox("Tamanho", db["Config_Vasos"]['Descricao_Vaso'].unique(), index=3)
+    with c3: sel_diametro = st.selectbox("Diâmetro", db["Config_Hidraulica"]['ID_Diametro_mm'].unique(), index=1)
     
     st.divider()
-    st.subheader("Margens de Lucro (%)")
     
-    col_m = st.columns(7)
-    m_clp = col_m[0].number_input("CLP", 0, 500, 50, step=1)
-    m_painel = col_m[1].number_input("Painel", 0, 500, 50, step=1)
-    m_hidra = col_m[2].number_input("Peças Hidr.", 0, 500, 50, step=1)
-    m_vasos = col_m[3].number_input("Vasos", 0, 500, 50, step=1)
-    m_elet = col_m[4].number_input("MDO Elét.", 0, 500, 50, step=1)
-    m_prog = col_m[5].number_input("MDO Prog.", 0, 500, 50, step=1)
-    m_mont_h = col_m[6].number_input("MDO Hidr.", 0, 500, 50, step=1)
+    # Margens
+    with st.expander("⚙️ Ajustar Margens de Lucro (%)", expanded=True):
+        col_m = st.columns(7)
+        m_clp = col_m[0].number_input("CLP", 0, 500, 50)
+        m_painel = col_m[1].number_input("Painel", 0, 500, 50)
+        m_hidra = col_m[2].number_input("Hidr.", 0, 500, 50)
+        m_vasos = col_m[3].number_input("Vasos", 0, 500, 50)
+        m_elet = col_m[4].number_input("MDO E.", 0, 500, 50)
+        m_prog = col_m[5].number_input("MDO P.", 0, 500, 50)
+        m_mont_h = col_m[6].number_input("MDO H.", 0, 500, 50)
 
-    MARGENS = {
-        "CLP": m_clp, "Itens de Painel": m_painel, "Hidráulica": m_hidra, "Vasos": m_vasos,
-        "MDO_Elet": m_elet, "MDO_Prog": m_prog, "MDO_Hidr": m_mont_h
-    }
+    MARGENS = {"CLP": m_clp, "Itens de Painel": m_painel, "Hidráulica": m_hidra, "Vasos": m_vasos, "MDO_Elet": m_elet, "MDO_Prog": m_prog, "MDO_Hidr": m_mont_h}
     
     df_inicial = calcular_itens(sel_vasos, sel_tamanho, sel_diametro, MARGENS)
     
     if df_inicial is None:
-        st.error("❌ Configuração técnica não encontrada.")
+        st.error("❌ Configuração não encontrada.")
     else:
         st.divider()
-        st.subheader("Itens do Orçamento")
+        st.subheader("📋 Seleção de Itens")
         
         df_editado = st.data_editor(
             df_inicial,
@@ -359,100 +384,87 @@ with tab_dash:
                 "Incluir": st.column_config.CheckboxColumn("Incluir", width="small"),
                 "Custo Unit": st.column_config.NumberColumn(format="R$ %.2f"),
                 "Venda Unit": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Total Venda": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Total Custo": None 
+                "Total Venda": st.column_config.NumberColumn(format="R$ %.2f")
             },
             disabled=["Descrição", "Grupo", "Qtd", "Custo Unit", "Venda Unit", "Total Venda"],
             hide_index=True,
             use_container_width=True
         )
         
-        # CÁLCULO FINAL (KPIs)
+        # CÁLCULOS FINAIS
         df_final = df_editado[df_editado['Incluir'] == True].copy()
         venda_total = df_final['Total Venda'].sum()
         custo_total = df_final['Total Custo'].sum()
         lucro = venda_total - custo_total
         lucro_pct = (lucro / custo_total * 100) if custo_total > 0 else 0
         
+        # --- ÁREA DE KPIS E GRÁFICO ---
         st.divider()
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Valor Final", f"R$ {venda_total:,.2f}")
-        k2.metric("Custo Estimado", f"R$ {custo_total:,.2f}")
-        k3.metric("Lucro R$", f"R$ {lucro:,.2f}")
-        k4.metric("Margem Real %", f"{lucro_pct:.1f}%")
         
-        with st.expander("📝 Dados do Cliente (Para PDF)", expanded=True):
-            col_c1, col_c2 = st.columns(2)
-            cli_nome = col_c1.text_input("Nome do Cliente", "Cliente Exemplo")
-            cli_proj = col_c2.text_input("Nome do Projeto", "ETA 01")
-            col_c3, col_c4, col_c5 = st.columns(3)
-            cli_validade = col_c3.date_input("Validade", datetime.now() + timedelta(days=15))
-            cli_prazo = col_c4.text_input("Prazo", "30 dias")
-            cli_pagto = col_c5.text_input("Pagamento", "50% Sinal / 50% Entrega")
+        col_kpi, col_chart = st.columns([1, 1])
         
-        if st.button("📄 BAIXAR PROPOSTA PDF", type="primary"):
+        with col_kpi:
+            st.markdown("#### 💹 Resumo Financeiro")
+            # Exibindo como "cartões" (estilizados pelo CSS lá em cima)
+            k1, k2 = st.columns(2)
+            k1.metric("Valor Venda", f"R$ {venda_total:,.2f}")
+            k2.metric("Custo Total", f"R$ {custo_total:,.2f}")
+            
+            k3, k4 = st.columns(2)
+            k3.metric("Lucro Líquido", f"R$ {lucro:,.2f}")
+            k4.metric("Margem %", f"{lucro_pct:.1f}%")
+        
+        with col_chart:
+            st.markdown("#### 🍰 Distribuição do Lucro")
+            # Gráfico de Pizza com Plotly
+            # Agrupa dados por Grupo
+            df_chart = df_final.groupby("Grupo")[["Total Venda", "Total Custo"]].sum().reset_index()
+            df_chart["Lucro"] = df_chart["Total Venda"] - df_chart["Total Custo"]
+            
+            # Gráfico
+            fig = px.pie(df_chart, values="Lucro", names="Grupo", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=250)
+            st.plotly_chart(fig, use_container_width=True)
+
+        # PDF
+        st.divider()
+        with st.expander("📄 Dados do Cliente para PDF", expanded=False):
+            c_pdf1, c_pdf2 = st.columns(2)
+            cli_nome = c_pdf1.text_input("Cliente", "Nome do Cliente")
+            cli_proj = c_pdf2.text_input("Projeto", "Projeto Exemplo")
+            c_pdf3, c_pdf4, c_pdf5 = st.columns(3)
+            cli_val = c_pdf3.date_input("Validade", datetime.now() + timedelta(days=10))
+            cli_prazo = c_pdf4.text_input("Prazo", "30 dias")
+            cli_pag = c_pdf5.text_input("Pagamento", "50% Entrada")
+
+        if st.button("🖨️ GERAR PDF DA PROPOSTA", type="primary"):
             logo_tmp = None
             if emp_logo:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f:
-                    f.write(emp_logo.read())
-                    logo_tmp = f.name
+                    f.write(emp_logo.read()); logo_tmp = f.name
             
-            dados_emp = {'nome': emp_nome, 'endereco': emp_end, 'telefone': emp_tel, 'email': emp_email, 'site': emp_site}
-            dados_cli = {'nome': cli_nome, 'projeto': cli_proj, 'validade': cli_validade.strftime('%d/%m/%Y'), 'prazo': cli_prazo, 'pagamento': cli_pagto}
+            dd_emp = {'nome':emp_nome, 'endereco':emp_end, 'telefone':emp_tel, 'email':emp_email, 'site':emp_site}
+            dd_cli = {'nome':cli_nome, 'projeto':cli_proj, 'validade':cli_val.strftime('%d/%m/%Y'), 'prazo':cli_prazo, 'pagamento':cli_pag}
             
-            pdf = PropostaPDF(dados_emp, dados_cli, logo_tmp)
-            pdf.add_page()
-            # pdf.header() # REMOVIDO PARA EVITAR DUPLICIDADE!
-            pdf.chapter_info_cliente()
-            pdf.chapter_tabela(df_final)
-            pdf.chapter_condicoes()
+            pdf = PropostaPDF(dd_emp, dd_cli, logo_tmp)
+            pdf.add_page(); pdf.chapter_info_cliente(); pdf.chapter_tabela(df_final); pdf.chapter_condicoes()
             
-            pdf_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-            pdf.output(pdf_file.name)
-            
-            with open(pdf_file.name, "rb") as f:
-                st.download_button("📥 Download PDF", f, f"Proposta_{cli_nome}.pdf", mime="application/pdf")
+            pfile = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            pdf.output(pfile.name)
+            with open(pfile.name, "rb") as f: st.download_button("📥 Baixar PDF", f, f"Proposta_{cli_nome}.pdf", "application/pdf")
             if logo_tmp: os.remove(logo_tmp)
 
-# ---------------- ABA ADMIN (SÓ APARECE SE LOGADO) ----------------
+# --- OUTRAS ABAS (ADMIN) ---
 if st.session_state.admin_logged_in:
     with tab_kits:
-        st.header("🛠️ Editor de Kits")
-        st.info("Selecione a linha e aperte DELETE para apagar itens.")
-        kits = sorted(db["Kits"]['ID_Kit'].unique())
-        c_k1, c_k2 = st.columns([2,1])
-        kit_sel = c_k1.selectbox("Kit:", kits)
-        novo = c_k2.text_input("Novo Kit:")
-        if c_k2.button("Criar") and novo:
-            if novo not in kits:
-                db["Kits"] = pd.concat([db["Kits"], pd.DataFrame({'ID_Kit':[novo],'ID_Material':[''],'Quantidade':[0]})])
-                save_data("Kits", db["Kits"]); st.rerun()
-        if novo in kits: kit_sel = novo
-        
-        df_k = db["Kits"][db["Kits"]['ID_Kit'] == kit_sel].copy()
-        df_view = pd.merge(df_k, db["Materiais"][['ID_Material','Descricao']], on='ID_Material', how='left')
-        
-        st.subheader(f"Itens de {kit_sel}")
-        df_edited = st.data_editor(df_view[['ID_Material','Descricao','Quantidade']], num_rows="dynamic", use_container_width=True, key="kit_edit")
-        
-        if st.button("💾 Salvar Kit"):
-            db["Kits"] = db["Kits"][db["Kits"]['ID_Kit'] != kit_sel]
-            novo_d = df_edited.copy(); novo_d['ID_Kit'] = kit_sel
-            novo_d = novo_d[novo_d['ID_Material'] != '']
-            db["Kits"] = pd.concat([db["Kits"], novo_d[['ID_Kit','ID_Material','Quantidade']]], ignore_index=True)
-            save_data("Kits", db["Kits"]); st.success("Salvo!"); st.rerun()
-            
-        st.divider()
-        st.markdown("#### Adicionar Item")
-        c_a1, c_a2, c_a3 = st.columns([3,1,1])
-        opts = db["Materiais"].apply(lambda x: f"{x['Descricao']} | {x['ID_Material']}", axis=1)
-        itm = c_a1.selectbox("Item:", opts); qtd = c_a2.number_input("Qtd:", 1.0)
-        if c_a3.button("➕ Add"):
-            db["Kits"] = pd.concat([db["Kits"], pd.DataFrame({'ID_Kit':[kit_sel], 'ID_Material':[itm.split(" | ")[-1]], 'Quantidade':[qtd]})], ignore_index=True)
+        st.header("Editor de Kits"); k_sel = st.selectbox("Kit", sorted(db["Kits"]['ID_Kit'].unique()))
+        df_k = db["Kits"][db["Kits"]['ID_Kit']==k_sel].merge(db["Materiais"][['ID_Material','Descricao']], on='ID_Material', how='left')
+        df_ed = st.data_editor(df_k[['ID_Material','Descricao','Quantidade']], num_rows="dynamic", key="ked")
+        if st.button("Salvar Kit"):
+            db["Kits"] = db["Kits"][db["Kits"]['ID_Kit']!=k_sel]
+            n = df_ed.copy(); n['ID_Kit']=k_sel; n=n[n['ID_Material']!='']
+            db["Kits"] = pd.concat([db["Kits"], n[['ID_Kit','ID_Material','Quantidade']]], ignore_index=True)
             save_data("Kits", db["Kits"]); st.rerun()
-
     with tab_db:
-        st.header("🗃️ Banco de Preços")
-        tb = st.selectbox("Tabela:", list(FILES.keys()))
-        ed = st.data_editor(db[tb], num_rows="dynamic", use_container_width=True)
-        if st.button("Salvar DB"): save_data(tb, ed); st.rerun()
+        t = st.selectbox("DB", list(FILES.keys())); e = st.data_editor(db[t], num_rows="dynamic")
+        if st.button("Salvar DB"): save_data(t, e); st.rerun()
