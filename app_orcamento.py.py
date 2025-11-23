@@ -13,30 +13,54 @@ except ImportError:
     PLOTLY_ATIVO = False
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO E ESTILO
+# 1. CONFIGURAÇÃO E ESTILO (DESIGN PREMIUM)
 # ==============================================================================
 st.set_page_config(page_title="Gerador de Propostas", page_icon="💼", layout="wide")
 
 st.markdown("""
 <style>
-    .stApp { background-color: #F8F9FA; }
+    /* Fundo */
+    .stApp { background-color: #F4F6F9; }
+    
+    /* Cartões de Métricas (KPIs) */
     div[data-testid="stMetric"] {
         background-color: #FFFFFF;
-        border: 1px solid #E0E0E0;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        border: 1px solid #E6E9EF;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
     }
-    [data-testid="stMetricValue"] { font-size: 24px; color: #00CC96; font-weight: bold; }
-    .stButton button { width: 100%; font-weight: bold; border-radius: 8px; }
-    .stDataFrame { border: 1px solid #ddd; border-radius: 8px; }
+    
+    /* Efeito Hover nos Cartões */
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+        border-color: #00CC96;
+    }
+
+    /* Cores dos Textos */
+    [data-testid="stMetricLabel"] { font-size: 15px; color: #6C757D; font-weight: 600; }
+    [data-testid="stMetricValue"] { font-size: 28px; color: #2C3E50; font-weight: 800; }
+    
+    /* Botões */
+    .stButton button { 
+        width: 100%; 
+        font-weight: bold; 
+        border-radius: 8px; 
+        height: 45px;
+    }
+    
+    /* Tabelas */
+    .stDataFrame { border: 1px solid #ddd; border-radius: 10px; overflow: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. LOGIN
+# 2. LOGIN & SEGURANÇA
 # ==============================================================================
 if 'admin_logged_in' not in st.session_state: st.session_state.admin_logged_in = False
+if 'reset_confirm' not in st.session_state: st.session_state.reset_confirm = False
 
 def check_login(u, p):
     if u == "admin" and p == "1234":
@@ -138,7 +162,7 @@ DEFAULT_DATA = {
     }
 }
 
-# --- POPULAR KITS PADRÃO (RECUPERADO) ---
+# --- POPULAR KITS PADRÃO (ESSENCIAL PARA NÃO FICAR VAZIO) ---
 def add_k(idk, idm, qtd):
     DEFAULT_DATA["Kits"]['ID_Kit'].append(idk)
     DEFAULT_DATA["Kits"]['ID_Material'].append(idm)
@@ -310,7 +334,22 @@ with st.sidebar:
             em = st.text_input("Email", "contato@", key="emp_em")
             es = st.text_input("Site", "www", key="emp_s")
         st.divider()
-        if st.button("⚠️ Reset", key="btn_reset"): load_data(True); st.rerun()
+        
+        # --- BOTÃO DE RESET SEGURO ---
+        if st.button("⚠️ Reset", key="btn_reset"):
+            st.session_state.reset_confirm = True
+        
+        if st.session_state.reset_confirm:
+            st.warning("Tem certeza? Isso apagará todas as edições.")
+            col_conf_1, col_conf_2 = st.columns(2)
+            if col_conf_1.button("✅ Sim", key="btn_yes_reset"):
+                load_data(True)
+                st.session_state.reset_confirm = False
+                st.rerun()
+            if col_conf_2.button("❌ Não", key="btn_no_reset"):
+                st.session_state.reset_confirm = False
+                st.rerun()
+
     if not st.session_state.admin_logged_in: logo, en, ee, et, em, es = None, "Empresa", "", "", "", ""
 
 tabs = st.tabs(["📊 Proposta", "🛠️ Kits", "🗃️ Dados"]) if st.session_state.admin_logged_in else st.tabs(["📊 Proposta"])
@@ -325,6 +364,7 @@ with tabs[0]:
     st.divider()
     with st.expander("⚙️ Margens (%)", expanded=True):
         cm = st.columns(7)
+        # Chaves únicas para evitar erro de elemento duplicado
         m = {
             "CLP": cm[0].number_input("CLP", 0, 500, 50, key="m_clp"), 
             "Itens de Painel": cm[1].number_input("Painel", 0, 500, 50, key="m_pnl"),
@@ -358,16 +398,21 @@ with tabs[0]:
         st.divider()
         c_k, c_g = st.columns([1,1])
         with c_k:
+            st.markdown("#### 💹 Resumo Financeiro")
             k1, k2 = st.columns(2); k1.metric("Venda", f"R$ {vt:,.2f}"); k2.metric("Custo", f"R$ {ct:,.2f}")
             k3, k4 = st.columns(2); k3.metric("Lucro", f"R$ {lc:,.2f}"); k4.metric("Margem", f"{lp:.1f}%")
         with c_g:
+            st.markdown("#### 🍰 Distribuição do Lucro")
             if PLOTLY_ATIVO and lc > 0:
                 g = fin.groupby("Grupo")[["Total Venda", "Total Custo"]].sum().reset_index()
                 g["L"] = g["Total Venda"] - g["Total Custo"]
-                fig = px.pie(g, values="L", names="Grupo", hole=0.4); fig.update_layout(height=250, margin=dict(t=0,b=0,l=0,r=0))
+                # Cores pastéis e gráfico tipo Donut
+                fig = px.pie(g, values="L", names="Grupo", hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig.update_layout(height=260, margin=dict(t=10,b=10,l=10,r=10), showlegend=False)
+                fig.update_traces(textposition='inside', textinfo='percent+label')
                 st.plotly_chart(fig, use_container_width=True)
             elif not PLOTLY_ATIVO: st.warning("Sem Plotly")
-            else: st.info("Sem lucro")
+            else: st.info("Sem lucro suficiente para gráfico")
 
         st.divider()
         with st.expander("📝 Cliente", expanded=False):
