@@ -162,7 +162,7 @@ DEFAULT_DATA = {
     }
 }
 
-# --- POPULAR KITS PADRÃO (ESSENCIAL PARA NÃO FICAR VAZIO) ---
+# --- POPULAR KITS PADRÃO ---
 def add_k(idk, idm, qtd):
     DEFAULT_DATA["Kits"]['ID_Kit'].append(idk)
     DEFAULT_DATA["Kits"]['ID_Material'].append(idm)
@@ -364,7 +364,6 @@ with tabs[0]:
     st.divider()
     with st.expander("⚙️ Margens (%)", expanded=True):
         cm = st.columns(7)
-        # Chaves únicas para evitar erro de elemento duplicado
         m = {
             "CLP": cm[0].number_input("CLP", 0, 500, 50, key="m_clp"), 
             "Itens de Painel": cm[1].number_input("Painel", 0, 500, 50, key="m_pnl"),
@@ -406,10 +405,12 @@ with tabs[0]:
             if PLOTLY_ATIVO and lc > 0:
                 g = fin.groupby("Grupo")[["Total Venda", "Total Custo"]].sum().reset_index()
                 g["L"] = g["Total Venda"] - g["Total Custo"]
-                # Cores pastéis e gráfico tipo Donut
-                fig = px.pie(g, values="L", names="Grupo", hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
-                fig.update_layout(height=260, margin=dict(t=10,b=10,l=10,r=10), showlegend=False)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
+                
+                # GRÁFICO DE PIZZA ESTILO V16 (LEGENDA LATERAL + HOVER PADRÃO)
+                fig = px.pie(g, values="L", names="Grupo", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=250)
+                # Removemos update_traces para manter o comportamento padrão de hover e legenda
+                
                 st.plotly_chart(fig, use_container_width=True)
             elif not PLOTLY_ATIVO: st.warning("Sem Plotly")
             else: st.info("Sem lucro suficiente para gráfico")
