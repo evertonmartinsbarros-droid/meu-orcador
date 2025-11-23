@@ -56,14 +56,57 @@ FILES = {
 
 DEFAULT_DATA = {
     "Materiais": {
-        'ID_Material': ['CLP-AUT-01', 'PAINEL-8060', 'CONT-MOT-12A', 'VASO-FIL-3072', 'VALV-BORB-E2', 'TUBO-PVC-2', 'MDO-MONT-ELET'],
-        'Descricao': ['CLP Básico', 'Painel 80x60', 'Contator 12A', 'Vaso 30x72', 'Válvula 2pol', 'Tubo 2pol', 'Montagem'],
-        'Grupo_Orcamento': ['CLP', 'Itens de Painel', 'Itens de Painel', 'Vasos', 'Hidráulica', 'Hidráulica', 'Mão de Obra'],
-        'Preco_Custo': [2500.0, 750.0, 90.0, 6000.0, 700.0, 90.0, 80.0]
+        'ID_Material': [
+            'CLP-AUT-01', 'CLP-AUT-02', 'PAINEL-8060', 'PAINEL-10060', 'PAINEL-10080',
+            'CONT-MOT-12A', 'RELE-INT-24V', 'DISJ-MOT-10A', 'DISJ-COM-02A', 'BORNE-TERRA',
+            'BORNE-SAK-4', 'CANALETA-6040', 'TRILHO-DIN', 'VASO-FIL-3072', 'VASO-FIL-3672',
+            'VASO-FIL-4272', 'VASO-FIL-4872', 'VASO-FIL-6380', 'VALV-BORB-E2', 'VALV-BORB-E3',
+            'VALV-BORB-E4', 'MEDIA-ZEO-25', 'TUBO-PVC-2', 'CURVA-PVC-90-2', 'TE-PVC-2',
+            'LUVA-PVC-2', 'TUBO-PVC-3', 'CURVA-PVC-90-3', 'TE-PVC-3', 'LUVA-PVC-4',
+            'TUBO-PVC-4', 'CURVA-PVC-90-4', 'TE-PVC-4', 'BOLSA-FLG-4', 'PARAF-INOX-M10',
+            'COLA-AQUA-Tubo', 'ZEO-SUP-34', 'CREPINA-FIL-1', 'IHM-AUT-7POL', 'IHM-AUT-10POL',
+            'FONTE-24V-2A', 'SIN-LED-24V', 'FIO-FLEX-1-5MM', 'DPS-20KA-275V', 'TERMINAL-OLHAL-4MM',
+            'ABRACADEIRA-20CM', 'VALV-BORB-E6', 'TUBO-PVC-6', 'TE-PVC-6', 'BOLSA-FLG-6',
+            'CURVA-PVC-90-6', 'BOLSA-FLG-2'
+        ],
+        'Descricao': [
+            'CLP Autus Básico', 'CLP Autus Avançado', 'Painel 800x600', 'Painel 1000x600', 'Painel 1000x800',
+            'Contator 12A', 'Relé Interface', 'Disjuntor Motor', 'Disjuntor 2A', 'Borne Terra',
+            'Borne SAK 4mm', 'Canaleta 60x40', 'Trilho DIN', 'Vaso 30x72', 'Vaso 36x72',
+            'Vaso 42x72', 'Vaso 48x72', 'Vaso 63x80', 'Válvula Borboleta 2"', 'Válvula Borboleta 3"',
+            'Válvula Borboleta 4"', 'Zeolita 25kg', 'Tubo PVC 2"', 'Curva 90 PVC 2"', 'Tê PVC 2"',
+            'Luva PVC 2"', 'Tubo PVC 3"', 'Curva 90 PVC 3"', 'Tê PVC 3"', 'Luva PVC 4"',
+            'Tubo PVC 4"', 'Curva 90 PVC 4"', 'Tê PVC 4"', 'Bolsa Flange 4"', 'Parafuso Inox Kit',
+            'Cola Aquatherm', 'Zeolita Suporte', 'Crepina 1"', 'IHM 7 Pol', 'IHM 10 Pol',
+            'Fonte 24V', 'Sinaleiro LED', 'Fio Flexivel', 'DPS 20kA', 'Terminal Olhal',
+            'Abraçadeira', 'Válvula Borboleta 6"', 'Tubo PVC 6"', 'Tê PVC 6"', 'Bolsa Flange 6"',
+            'Curva 90 PVC 6"', 'Bolsa Flange 2"'
+        ],
+        'Grupo_Orcamento': [
+            'CLP', 'CLP', 'Itens de Painel', 'Itens de Painel', 'Itens de Painel',
+            'Itens de Painel', 'Itens de Painel', 'Itens de Painel', 'Itens de Painel', 'Itens de Painel',
+            'Itens de Painel', 'Itens de Painel', 'Itens de Painel', 'Vasos', 'Vasos',
+            'Vasos', 'Vasos', 'Vasos', 'Hidráulica', 'Hidráulica',
+            'Hidráulica', 'Hidráulica', 'Hidráulica', 'Hidráulica', 'Hidráulica',
+            'Hidráulica', 'Hidráulica', 'Hidráulica', 'Hidráulica', 'Hidráulica',
+            'Hidráulica', 'Hidráulica', 'Hidráulica', 'Hidráulica', 'Hidráulica',
+            'Hidráulica', 'Hidráulica', 'Hidráulica', 'Itens de Painel', 'Itens de Painel',
+            'Itens de Painel', 'Itens de Painel', 'Itens de Painel', 'Itens de Painel', 'Itens de Painel',
+            'Itens de Painel', 'Hidráulica', 'Hidráulica', 'Hidráulica', 'Hidráulica',
+            'Hidráulica', 'Hidráulica'
+        ],
+        'Preco_Custo': [
+            2500.0, 4500.0, 750.0, 950.0, 1100.0, 90.0, 40.0, 150.0, 35.0, 5.5,
+            3.5, 45.0, 20.0, 6000.0, 7500.0, 8500.0, 9500.0, 15000.0, 700.0, 900.0,
+            1200.0, 110.0, 90.0, 12.0, 15.0, 8.0, 150.0, 20.0, 24.0, 12.0,
+            210.0, 28.0, 32.0, 42.0, 4.0, 25.0, 110.0, 35.0, 1800.0, 2600.0,
+            180.0, 25.0, 150.0, 80.0, 30.0, 15.0, 1900.0, 350.0, 55.0, 60.0,
+            45.0, 25.0
+        ]
     },
     "MaoDeObra": {
         'ID_MaoDeObra': ['MDO-MONT-ELET', 'MDO-PROG-CLP', 'MDO-MONT-HIDR'],
-        'Tipo_Servico': ['Montagem Elétrica', 'Programação CLP', 'Montagem Hidráulica'],
+        'Tipo_Servico': ['Montagem Painel Elétrico', 'Programação de CLP', 'Montagem Hidráulica'],
         'Grupo_Orcamento': ['Mão de Obra', 'Mão de Obra', 'Mão de Obra'],
         'Custo_Hora': [80.0, 150.0, 70.0]
     },
@@ -73,7 +116,8 @@ DEFAULT_DATA = {
         'ID_Material_Painel': ['PAINEL-8060', 'PAINEL-8060', 'PAINEL-10060', 'PAINEL-10080'],
         'ID_Material_IHM': ['IHM-AUT-7POL', 'IHM-AUT-7POL', 'IHM-AUT-10POL', 'IHM-AUT-10POL'],
         'ID_Kit_Painel_Eletrico': ['KIT-PAINEL-1V', 'KIT-PAINEL-2V', 'KIT-PAINEL-3V', 'KIT-PAINEL-4V'],
-        'Horas_MDO_Mont_Elet': [16, 24, 32, 40], 'Horas_MDO_Prog_CLP': [10, 16, 24, 30]
+        'Horas_MDO_Mont_Elet': [16, 24, 32, 40],
+        'Horas_MDO_Prog_CLP': [10, 16, 24, 30]
     },
     "Config_Vasos": {
         'Descricao_Vaso': ['30x72', '36x72', '42x72', '48x72', '63x80'],
@@ -89,8 +133,35 @@ DEFAULT_DATA = {
             'KIT-HID-4872-PV-150MM', 'KIT-HID-6380-PV-100MM', 'KIT-HID-6380-PV-150MM'
         ]
     },
-    "Kits": {'ID_Kit': [], 'ID_Material': [], 'Quantidade': []}
+    "Kits": {
+        'ID_Kit': [], 'ID_Material': [], 'Quantidade': []
+    }
 }
+
+# --- POPULAR KITS PADRÃO (RECUPERADO) ---
+def add_k(idk, idm, qtd):
+    DEFAULT_DATA["Kits"]['ID_Kit'].append(idk)
+    DEFAULT_DATA["Kits"]['ID_Material'].append(idm)
+    DEFAULT_DATA["Kits"]['Quantidade'].append(qtd)
+
+# Kits Painel
+for m,q in [('CONT-MOT-12A',6),('RELE-INT-24V',6)]: add_k('KIT-PAINEL-1V', m, q)
+for m,q in [('CONT-MOT-12A',12),('RELE-INT-24V',12)]: add_k('KIT-PAINEL-2V', m, q)
+for m,q in [('CONT-MOT-12A',18),('RELE-INT-24V',18)]: add_k('KIT-PAINEL-3V', m, q)
+for m,q in [('CONT-MOT-12A',24),('RELE-INT-24V',24),('DISJ-MOT-10A',24),('DISJ-COM-02A',1),
+            ('BORNE-SAK-4',160),('BORNE-TERRA',40),('CANALETA-6040',5),('TRILHO-DIN',6),
+            ('FONTE-24V-2A',1),('SIN-LED-24V',8),('FIO-FLEX-1-5MM',2),('DPS-20KA-275V',1),
+            ('TERMINAL-OLHAL-4MM',4),('ABRACADEIRA-20CM',2)]: add_k('KIT-PAINEL-4V', m, q)
+
+# Kits Hidráulicos
+for k in ['KIT-HID-3672-PV-100MM', 'KIT-HID-4272-PV-100MM', 'KIT-HID-4872-PV-100MM', 'KIT-HID-6380-PV-100MM']:
+    for m,q in [('MEDIA-ZEO-25',40),('VALV-BORB-E4',6),('ZEO-SUP-34',2),('CURVA-PVC-90-4',12),
+                ('TE-PVC-4',5),('BOLSA-FLG-4',12),('PARAF-INOX-M10',48),('TUBO-PVC-4',2)]: add_k(k, m, q)
+for k in ['KIT-HID-3072-PV-50MM', 'KIT-HID-3672-PV-50MM']:
+    for m,q in [('MEDIA-ZEO-25',20),('VALV-BORB-E2',6),('CURVA-PVC-90-2',12),('TUBO-PVC-2',2)]: add_k(k, m, q)
+for k in ['KIT-HID-4272-PV-150MM', 'KIT-HID-4872-PV-150MM', 'KIT-HID-6380-PV-150MM']:
+    for m,q in [('MEDIA-ZEO-25',60),('VALV-BORB-E6',6),('CURVA-PVC-90-6',12),('TUBO-PVC-6',2)]: add_k(k, m, q)
+
 
 def load_data(force_reset=False):
     dfs = {}
@@ -254,7 +325,6 @@ with tabs[0]:
     st.divider()
     with st.expander("⚙️ Margens (%)", expanded=True):
         cm = st.columns(7)
-        # --- AQUI ESTAVA O ERRO (CORRIGIDO COM NOMES ÚNICOS E KEYS) ---
         m = {
             "CLP": cm[0].number_input("CLP", 0, 500, 50, key="m_clp"), 
             "Itens de Painel": cm[1].number_input("Painel", 0, 500, 50, key="m_pnl"),
