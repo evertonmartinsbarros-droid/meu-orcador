@@ -33,7 +33,7 @@ if 'admin_logged_in' not in st.session_state:
     st.session_state.admin_logged_in = False
 
 def check_login(user, password):
-    # --- CONFIGURE AQUI SUA SENHA ---
+    # --- SENHA PADRÃO: admin / 1234 ---
     if user == "admin" and password == "1234":
         st.session_state.admin_logged_in = True
         st.rerun()
@@ -118,7 +118,7 @@ def save_data(key, df):
 db = load_data()
 
 # ==============================================================================
-# 4. CLASSE PDF (Com cabeçalho só na 1ª página)
+# 4. CLASSE PDF (CORRIGIDA)
 # ==============================================================================
 class PropostaPDF(FPDF):
     def __init__(self, empresa_dados, cliente_dados, logo_path=None):
@@ -128,13 +128,14 @@ class PropostaPDF(FPDF):
         self.logo_path = logo_path
 
     def header(self):
-        # O cabeçalho só aparece na página 1
+        # AQUI ESTAVA O ERRO - O HEADER É CHAMADO AUTOMATICAMENTE PELO ADD_PAGE
+        # Só desenha se for página 1
         if self.page_no() == 1:
             if self.logo_path:
                 try: self.image(self.logo_path, 10, 8, 33)
                 except: pass
             
-            # Dados da Empresa (Alinhado à Direita)
+            # Dados da Empresa
             self.set_font('Arial', 'B', 12)
             self.cell(0, 5, self.empresa['nome'], 0, 1, 'R')
             self.set_font('Arial', '', 9)
@@ -145,12 +146,11 @@ class PropostaPDF(FPDF):
             
             # Título
             self.set_font('Arial', 'B', 16)
-            self.set_text_color(0, 51, 102) # Azul escuro
+            self.set_text_color(0, 51, 102)
             self.cell(0, 10, 'PROPOSTA COMERCIAL', 0, 1, 'C')
             self.ln(5)
             self.set_text_color(0, 0, 0)
         else:
-            # Em outras páginas, apenas um espaço em branco para margem superior
             self.ln(10)
 
     def footer(self):
@@ -160,7 +160,6 @@ class PropostaPDF(FPDF):
         self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
 
     def chapter_info_cliente(self):
-        # Apenas imprime se for a primeira página
         if self.page_no() == 1:
             self.set_fill_color(240, 240, 240)
             self.set_font('Arial', 'B', 10)
@@ -175,7 +174,6 @@ class PropostaPDF(FPDF):
         self.set_fill_color(0, 51, 102)
         self.set_text_color(255, 255, 255)
         self.set_font('Arial', 'B', 9)
-        # Cabeçalho
         self.cell(100, 8, "Item / Descrição", 1, 0, 'L', 1)
         self.cell(20, 8, "Qtd", 1, 0, 'C', 1)
         self.cell(35, 8, "Unitário (R$)", 1, 0, 'R', 1)
@@ -205,7 +203,6 @@ class PropostaPDF(FPDF):
         self.multi_cell(0, 6, f"Prazo de Entrega: {self.cliente['prazo']}")
         self.multi_cell(0, 6, f"Pagamento: {self.cliente['pagamento']}")
         self.ln(20)
-        
         self.set_font('Arial', '', 10)
         y = self.get_y()
         self.line(20, y, 90, y)
@@ -312,7 +309,6 @@ with st.sidebar:
             if c2.button("NÃO"): st.session_state.reset_confirm = False; st.rerun()
     
     if not st.session_state.admin_logged_in:
-        # Valores padrão para usuário não logado (para não quebrar o PDF)
         emp_logo = None
         emp_nome = "Sua Empresa"
         emp_end, emp_tel, emp_email, emp_site = "", "", "", ""
@@ -405,8 +401,11 @@ with tab_dash:
             dados_cli = {'nome': cli_nome, 'projeto': cli_proj, 'validade': cli_validade.strftime('%d/%m/%Y'), 'prazo': cli_prazo, 'pagamento': cli_pagto}
             
             pdf = PropostaPDF(dados_emp, dados_cli, logo_tmp)
-            pdf.add_page(); pdf.header(); pdf.chapter_info_cliente()
-            pdf.chapter_tabela(df_final); pdf.chapter_condicoes()
+            pdf.add_page()
+            # pdf.header() # REMOVIDO PARA EVITAR DUPLICIDADE!
+            pdf.chapter_info_cliente()
+            pdf.chapter_tabela(df_final)
+            pdf.chapter_condicoes()
             
             pdf_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
             pdf.output(pdf_file.name)
