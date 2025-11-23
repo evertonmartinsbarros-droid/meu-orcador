@@ -224,22 +224,22 @@ def calc(n, t, d, m):
 with st.sidebar:
     st.title("🛡️ Admin")
     if not st.session_state.admin_logged_in:
-        u = st.text_input("User"); p = st.text_input("Pass", type="password")
-        if st.button("Entrar"): check_login(u, p)
+        u = st.text_input("User", key="login_u"); p = st.text_input("Pass", type="password", key="login_p")
+        if st.button("Entrar", key="btn_login"): check_login(u, p)
     else:
         st.success("Logado"); 
-        if st.button("Sair"): logout()
+        if st.button("Sair", key="btn_logout"): logout()
         st.divider()
-        logo = st.file_uploader("Logo", type=['png', 'jpg'])
+        logo = st.file_uploader("Logo", type=['png', 'jpg'], key="upl_logo")
         if logo: st.image(logo, width=150)
         with st.expander("Empresa"):
-            en = st.text_input("Nome", "Empresa Ltda")
-            ee = st.text_input("End", "Rua X")
-            et = st.text_input("Tel", "(11) 999")
-            em = st.text_input("Email", "contato@")
-            es = st.text_input("Site", "www")
+            en = st.text_input("Nome", "Empresa Ltda", key="emp_n")
+            ee = st.text_input("End", "Rua X", key="emp_e")
+            et = st.text_input("Tel", "(11) 999", key="emp_t")
+            em = st.text_input("Email", "contato@", key="emp_em")
+            es = st.text_input("Site", "www", key="emp_s")
         st.divider()
-        if st.button("⚠️ Reset"): load_data(True); st.rerun()
+        if st.button("⚠️ Reset", key="btn_reset"): load_data(True); st.rerun()
     if not st.session_state.admin_logged_in: logo, en, ee, et, em, es = None, "Empresa", "", "", "", ""
 
 tabs = st.tabs(["📊 Proposta", "🛠️ Kits", "🗃️ Dados"]) if st.session_state.admin_logged_in else st.tabs(["📊 Proposta"])
@@ -247,25 +247,39 @@ tabs = st.tabs(["📊 Proposta", "🛠️ Kits", "🗃️ Dados"]) if st.session
 with tabs[0]:
     st.title("Gerador de Propostas")
     c1, c2, c3 = st.columns(3)
-    nv = c1.selectbox("Vasos", [1,2,3,4], index=3)
-    tv = c2.selectbox("Tamanho", db["Config_Vasos"]['Descricao_Vaso'].unique(), index=3)
-    dt = c3.selectbox("Diâmetro", db["Config_Hidraulica"]['ID_Diametro_mm'].unique(), index=1)
+    nv = c1.selectbox("Vasos", [1,2,3,4], index=3, key="sel_vasos")
+    tv = c2.selectbox("Tamanho", db["Config_Vasos"]['Descricao_Vaso'].unique(), index=3, key="sel_tam")
+    dt = c3.selectbox("Diâmetro", db["Config_Hidraulica"]['ID_Diametro_mm'].unique(), index=1, key="sel_dia")
     
     st.divider()
     with st.expander("⚙️ Margens (%)", expanded=True):
         cm = st.columns(7)
+        # --- AQUI ESTAVA O ERRO (CORRIGIDO COM NOMES ÚNICOS E KEYS) ---
         m = {
-            "CLP": cm[0].number_input("CLP", 0, 500, 50), "Itens de Painel": cm[1].number_input("Painel", 0, 500, 50),
-            "Hidráulica": cm[2].number_input("Hidr", 0, 500, 50), "Vasos": cm[3].number_input("Vasos", 0, 500, 50),
-            "MDO_Elet": cm[4].number_input("Elet", 0, 500, 50), "MDO_Prog": cm[5].number_input("Prog", 0, 500, 50),
-            "MDO_Hidr": cm[6].number_input("Hidr", 0, 500, 50)
+            "CLP": cm[0].number_input("CLP", 0, 500, 50, key="m_clp"), 
+            "Itens de Painel": cm[1].number_input("Painel", 0, 500, 50, key="m_pnl"),
+            "Hidráulica": cm[2].number_input("Peças Hidr.", 0, 500, 50, key="m_hid_peca"), 
+            "Vasos": cm[3].number_input("Vasos", 0, 500, 50, key="m_vaso"),
+            "MDO_Elet": cm[4].number_input("MDO Elet.", 0, 500, 50, key="m_mdo_elet"), 
+            "MDO_Prog": cm[5].number_input("MDO Prog.", 0, 500, 50, key="m_mdo_prog"),
+            "MDO_Hidr": cm[6].number_input("MDO Hidr.", 0, 500, 50, key="m_mdo_hidr")
         }
     
     df = calc(nv, tv, dt, m)
     if df is None: st.error("Erro config")
     else:
         st.divider()
-        edited = st.data_editor(df, column_config={"Incluir": st.column_config.CheckboxColumn(width="small"), "Custo Unit": st.column_config.NumberColumn(format="R$ %.2f"), "Venda Unit": st.column_config.NumberColumn(format="R$ %.2f"), "Total Venda": st.column_config.NumberColumn(format="R$ %.2f")}, disabled=["Descrição", "Grupo", "Qtd", "Custo Unit", "Venda Unit", "Total Venda"], hide_index=True, use_container_width=True)
+        edited = st.data_editor(
+            df, 
+            column_config={
+                "Incluir": st.column_config.CheckboxColumn(width="small"), 
+                "Custo Unit": st.column_config.NumberColumn(format="R$ %.2f"), 
+                "Venda Unit": st.column_config.NumberColumn(format="R$ %.2f"), 
+                "Total Venda": st.column_config.NumberColumn(format="R$ %.2f")
+            }, 
+            disabled=["Descrição", "Grupo", "Qtd", "Custo Unit", "Venda Unit", "Total Venda"], 
+            hide_index=True, use_container_width=True, key="main_editor"
+        )
         
         fin = edited[edited['Incluir']].copy()
         vt = fin['Total Venda'].sum(); ct = fin['Total Custo'].sum(); lc = vt - ct
@@ -288,11 +302,11 @@ with tabs[0]:
         st.divider()
         with st.expander("📝 Cliente", expanded=False):
             cc1, cc2 = st.columns(2)
-            cn = cc1.text_input("Nome", "Cliente"); cp = cc2.text_input("Projeto", "Proj")
+            cn = cc1.text_input("Nome", "Cliente", key="cli_n"); cp = cc2.text_input("Projeto", "Proj", key="cli_p")
             cc3, cc4, cc5 = st.columns(3)
-            cv = cc3.text_input("Validade", "10 dias"); cpr = cc4.text_input("Prazo", "30 dias"); cpg = cc5.text_input("Pagto", "50/50")
+            cv = cc3.text_input("Validade", "10 dias", key="cli_v"); cpr = cc4.text_input("Prazo", "30 dias", key="cli_pr"); cpg = cc5.text_input("Pagto", "50/50", key="cli_pg")
 
-        if st.button("📄 PDF", type="primary"):
+        if st.button("📄 PDF", type="primary", key="btn_pdf"):
             lt = None
             if logo:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f: f.write(logo.read()); lt = f.name
@@ -306,18 +320,16 @@ if st.session_state.admin_logged_in:
     with tabs[1]:
         st.header("🛠️ Editor de Kits")
         
-        # SELEÇÃO DO KIT
         kits_disp = sorted(db["Kits"]['ID_Kit'].unique())
         c_k1, c_k2 = st.columns([2, 1])
-        k_sel = c_k1.selectbox("Selecione:", kits_disp)
-        novo_k = c_k2.text_input("Novo Kit:")
-        if c_k2.button("Criar"):
+        k_sel = c_k1.selectbox("Selecione:", kits_disp, key="sel_kit_adm")
+        novo_k = c_k2.text_input("Novo Kit:", key="inp_new_kit")
+        if c_k2.button("Criar", key="btn_crt_kit"):
             if novo_k not in kits_disp:
                 db["Kits"] = pd.concat([db["Kits"], pd.DataFrame({'ID_Kit':[novo_k], 'ID_Material':[''], 'Quantidade':[0]})], ignore_index=True)
                 save_data("Kits", db["Kits"]); st.rerun()
         if novo_k in kits_disp: k_sel = novo_k
 
-        # TABELA DE ITENS (COM REMOÇÃO)
         st.subheader(f"Itens: {k_sel}")
         st.info("💡 Para remover: Selecione a linha e aperte DELETE no teclado.")
         
@@ -331,30 +343,27 @@ if st.session_state.admin_logged_in:
                 "Descricao": st.column_config.TextColumn(disabled=True),
                 "Quantidade": st.column_config.NumberColumn(min_value=0.0)
             },
-            num_rows="dynamic", # ISSO PERMITE REMOVER
-            key="ked", use_container_width=True
+            num_rows="dynamic", key="ked", use_container_width=True
         )
         
-        if st.button("💾 Salvar Alterações (Qtd/Remoção)"):
+        if st.button("💾 Salvar Alterações (Qtd/Remoção)", key="btn_save_kit"):
             db["Kits"] = db["Kits"][db["Kits"]['ID_Kit'] != k_sel]
             n = df_ed.copy(); n['ID_Kit'] = k_sel; n = n[n['ID_Material'] != '']
             db["Kits"] = pd.concat([db["Kits"], n[['ID_Kit', 'ID_Material', 'Quantidade']]], ignore_index=True)
             save_data("Kits", db["Kits"]); st.success("Salvo!"); st.rerun()
         
         st.divider()
-        
-        # --- AQUI ESTÁ A FERRAMENTA DE ADICIONAR QUE TINHA SUMIDO ---
         st.markdown("#### ➕ Adicionar Material ao Kit")
         ca1, ca2, ca3 = st.columns([3, 1, 1])
         opts = db["Materiais"].apply(lambda x: f"{x['Descricao']} | {x['ID_Material']}", axis=1)
-        add_itm = ca1.selectbox("Item:", opts)
-        add_qtd = ca2.number_input("Qtd:", 1.0)
-        if ca3.button("Adicionar"):
+        add_itm = ca1.selectbox("Item:", opts, key="sel_add_item")
+        add_qtd = ca2.number_input("Qtd:", 1.0, key="num_add_qtd")
+        if ca3.button("Adicionar", key="btn_add_item"):
             id_add = add_itm.split(" | ")[-1]
             db["Kits"] = pd.concat([db["Kits"], pd.DataFrame({'ID_Kit':[k_sel], 'ID_Material':[id_add], 'Quantidade':[add_qtd]})], ignore_index=True)
             save_data("Kits", db["Kits"]); st.toast("Adicionado!"); st.rerun()
 
     with tabs[2]:
-        st.header("Dados"); t = st.selectbox("Tabela", list(FILES.keys()))
-        ed = st.data_editor(db[t], num_rows="dynamic", use_container_width=True)
-        if st.button("Salvar DB"): save_data(t, ed); st.rerun()
+        st.header("Dados"); t = st.selectbox("Tabela", list(FILES.keys()), key="sel_db_tab")
+        ed = st.data_editor(db[t], num_rows="dynamic", use_container_width=True, key="db_editor")
+        if st.button("Salvar DB", key="btn_save_db"): save_data(t, ed); st.rerun()
