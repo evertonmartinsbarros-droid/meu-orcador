@@ -44,7 +44,6 @@ FILES = {
     "Config_Hidraulica": "db_conf_hidra.csv"
 }
 
-# DADOS PADRÃO (Mantendo a base completa)
 DEFAULT_DATA = {
     "Materiais": {
         'ID_Material': [
@@ -153,7 +152,6 @@ for k in ['KIT-HID-3072-PV-50MM', 'KIT-HID-3672-PV-50MM']:
 for k in ['KIT-HID-4272-PV-150MM', 'KIT-HID-4872-PV-150MM', 'KIT-HID-6380-PV-150MM']:
     for m,q in [('MEDIA-ZEO-25',60),('VALV-BORB-E6',6),('CURVA-PVC-90-6',12),('TUBO-PVC-6',2)]: add_k(k, m, q)
 
-
 # --- FUNÇÕES DE CARREGAMENTO ---
 def load_data(force_reset=False):
     dataframes = {}
@@ -175,27 +173,43 @@ def save_data(key, df):
     df.to_csv(FILES[key], index=False)
     st.toast(f"✅ Dados de {key} salvos com sucesso!", icon="💾")
 
-# Reset Sidebar
+# Reset Sidebar com Confirmação
 with st.sidebar:
     st.header("⚙️ Opções")
-    if st.button("🔄 RESTAURAR DADOS PADRÃO", type="primary"):
-        load_data(force_reset=True)
-        st.success("Dados restaurados!")
-        st.rerun()
+    
+    if 'confirma_reset' not in st.session_state:
+        st.session_state.confirma_reset = False
+
+    if st.button("⚠️ Restaurar Padrão"):
+        st.session_state.confirma_reset = True
+
+    if st.session_state.confirma_reset:
+        st.warning("Tem certeza? Isso apagará todas as suas edições.")
+        col_sim, col_nao = st.columns(2)
+        with col_sim:
+            if st.button("✅ Sim, Restaurar"):
+                load_data(force_reset=True)
+                st.success("Dados restaurados!")
+                st.session_state.confirma_reset = False
+                st.rerun()
+        with col_nao:
+            if st.button("❌ Cancelar"):
+                st.session_state.confirma_reset = False
+                st.rerun()
 
 db = load_data()
 
 # ==============================================================================
-# 3. CÁLCULO
+# 3. CÁLCULO (GERA A LISTA COMPLETA INICIAL)
 # ==============================================================================
-def calcular_orcamento(num_vasos, tam_vaso, diametro, margens_dict):
+def calcular_itens_iniciais(num_vasos, tam_vaso, diametro, margens_dict):
     try:
         regra_painel = db["Config_Acionamentos"][db["Config_Acionamentos"]['Num_Vasos'] == num_vasos].iloc[0]
         regra_vaso = db["Config_Vasos"][db["Config_Vasos"]['Descricao_Vaso'] == tam_vaso].iloc[0]
         df_hidra = db["Config_Hidraulica"]
         filtro_hid = (df_hidra['Descricao_Vaso'] == tam_vaso) & (df_hidra['ID_Diametro_mm'] == diametro)
         
-        if filtro_hid.sum() == 0: return None, 0, 0
+        if filtro_hid.sum() == 0: return None
         
         id_kit_hidra = df_hidra[filtro_hid].iloc[0]['ID_Kit_Hidraulico_p_Vaso']
         id_kit_painel = regra_painel['ID_Kit_Painel_Eletrico']
@@ -220,7 +234,7 @@ def calcular_orcamento(num_vasos, tam_vaso, diametro, margens_dict):
         itens.append({'ID': 'MDO-PROG-CLP', 'Qtd': regra_painel['Horas_MDO_Prog_CLP'], 'Tipo': 'MDO'})
         itens.append({'ID': 'MDO-MONT-HIDR', 'Qtd': regra_vaso['Horas_MDO_Hidr_p_Vaso'] * num_vasos, 'Tipo': 'MDO'})
 
-        res, custo_tot, venda_tot = [], 0, 0
+        res = []
         df_mat, df_mdo = db["Materiais"], db["MaoDeObra"]
 
         for item in itens:
@@ -228,22 +242,35 @@ def calcular_orcamento(num_vasos, tam_vaso, diametro, margens_dict):
                 d = df_mat[df_mat['ID_Material'] == item['ID']]
                 if d.empty: continue
                 desc, grp, cust = d.iloc[0]['Descricao'], d.iloc[0]['Grupo_Orcamento'], float(d.iloc[0]['Preco_Custo'])
+                mrg = margens_dict.get(grp, 0.5)
             else:
                 d = df_mdo[df_mdo['ID_MaoDeObra'] == item['ID']]
                 desc, grp, cust = d.iloc[0]['Tipo_Servico'], "Mão de Obra", float(d.iloc[0]['Custo_Hora'])
+                
+                # Margem Específica para cada MDO
+                if item['ID'] == 'MDO-MONT-ELET': mrg = margens_dict.get("MDO_Elet", 0.5)
+                elif item['ID'] == 'MDO-PROG-CLP': mrg = margens_dict.get("MDO_Prog", 0.5)
+                elif item['ID'] == 'MDO-MONT-HIDR': mrg = margens_dict.get("MDO_Hidr", 0.5)
+                else: mrg = 0.5
 
-            mrg = margens_dict.get(grp, 0.5)
             unit_venda = cust * (1 + mrg)
             tot_cust = cust * item['Qtd']
             tot_vend = unit_venda * item['Qtd']
             
-            res.append({'Descrição': desc, 'Grupo': grp, 'Qtd': item['Qtd'], 'Custo Unit': cust, 'Venda Unit': unit_venda, 'Total Venda': tot_vend})
-            custo_tot += tot_cust
-            venda_tot += tot_vend
+            res.append({
+                'Incluir': True,
+                'Descrição': desc, 
+                'Grupo': grp, 
+                'Qtd': item['Qtd'], 
+                'Custo Unit': cust,
+                'Venda Unit': unit_venda,
+                'Total Venda': tot_vend,
+                'Total Custo': tot_cust
+            })
 
-        return pd.DataFrame(res), custo_tot, venda_tot
+        return pd.DataFrame(res)
     except:
-        return None, 0, 0
+        return None
 
 # ==============================================================================
 # 4. INTERFACE
@@ -251,7 +278,6 @@ def calcular_orcamento(num_vasos, tam_vaso, diametro, margens_dict):
 
 tab_dash, tab_kits, tab_db = st.tabs(["📊 Dashboard", "🛠️ Construtor de Kits", "🗃️ Banco de Dados"])
 
-# --- ABA 1: DASHBOARD ---
 with tab_dash:
     st.title("Simulador de Orçamento")
     c1, c2, c3 = st.columns(3)
@@ -260,128 +286,121 @@ with tab_dash:
     with c3: sel_diametro = st.selectbox("Diâmetro", db["Config_Hidraulica"]['ID_Diametro_mm'].unique(), index=1)
     
     st.divider()
-    m1, m2, m3, m4, m5 = st.columns(5)
+    st.subheader("Configuração de Margens (%)")
+    
+    # Linha 1: Materiais (INPUT NUMÉRICO)
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    m_clp = col_m1.number_input("CLP", min_value=0.0, max_value=500.0, value=50.0, step=1.0) / 100
+    m_painel = col_m2.number_input("Painel (Peças)", min_value=0.0, max_value=500.0, value=50.0, step=1.0) / 100
+    m_hidra = col_m3.number_input("Hidráulica", min_value=0.0, max_value=500.0, value=50.0, step=1.0) / 100
+    m_vasos = col_m4.number_input("Vasos", min_value=0.0, max_value=500.0, value=50.0, step=1.0) / 100
+    
+    # Linha 2: Mão de Obra (INPUT NUMÉRICO)
+    col_md1, col_md2, col_md3 = st.columns(3)
+    m_mdo_elet = col_md1.number_input("MDO Elétrica", min_value=0.0, max_value=500.0, value=50.0, step=1.0) / 100
+    m_mdo_prog = col_md2.number_input("MDO Programação", min_value=0.0, max_value=500.0, value=50.0, step=1.0) / 100
+    m_mdo_hidr = col_md3.number_input("MDO Hidráulica", min_value=0.0, max_value=500.0, value=50.0, step=1.0) / 100
+
     MARGENS = {
-        "CLP": m1.slider("CLP", 0, 100, 50)/100, "Hidráulica": m2.slider("Hidr", 0, 100, 50)/100,
-        "Itens de Painel": m3.slider("Painel", 0, 100, 50)/100, "Mão de Obra": m4.slider("MDO", 0, 100, 50)/100,
-        "Vasos": m5.slider("Vasos", 0, 100, 50)/100
+        "CLP": m_clp, "Itens de Painel": m_painel, "Hidráulica": m_hidra, "Vasos": m_vasos,
+        "MDO_Elet": m_mdo_elet, "MDO_Prog": m_mdo_prog, "MDO_Hidr": m_mdo_hidr
     }
     
-    df_res, custo, venda = calcular_orcamento(sel_vasos, sel_tamanho, sel_diametro, MARGENS)
+    df_inicial = calcular_itens_iniciais(sel_vasos, sel_tamanho, sel_diametro, MARGENS)
     
-    if df_res is None:
-        st.error("Configuração não encontrada.")
+    if df_inicial is None:
+        st.error("Configuração inválida (Kit Hidráulico não encontrado).")
     else:
-        lucro = venda - custo
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Venda", f"R$ {venda:,.2f}")
-        k2.metric("Custo", f"R$ {custo:,.2f}")
-        k3.metric("Margem R$", f"R$ {lucro:,.2f}")
-        k4.metric("Margem %", f"{((lucro/custo)*100) if custo>0 else 0:.1f}%")
+        st.divider()
+        st.markdown("### Selecione os itens para o Orçamento:")
+        
+        df_editado = st.data_editor(
+            df_inicial,
+            column_config={
+                "Incluir": st.column_config.CheckboxColumn("Incluir?", default=True),
+                "Custo Unit": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Venda Unit": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Total Venda": st.column_config.NumberColumn(format="R$ %.2f"),
+                "Total Custo": None 
+            },
+            disabled=["Descrição", "Grupo", "Qtd", "Custo Unit", "Venda Unit", "Total Venda"],
+            hide_index=True,
+            use_container_width=True,
+            height=400
+        )
+
+        df_final = df_editado[df_editado['Incluir'] == True].copy()
+        
+        venda_final = df_final['Total Venda'].sum()
+        custo_final = df_final['Total Custo'].sum()
+        lucro = venda_final - custo_final
+        lucro_pct = (lucro/custo_final*100) if custo_final > 0 else 0
         
         st.divider()
-        st.subheader("Itens do Orçamento")
-        df_show = df_res.copy()
-        for c in ['Custo Unit', 'Venda Unit', 'Total Venda']: df_show[c] = df_show[c].map('R$ {:,.2f}'.format)
-        st.dataframe(df_show, use_container_width=True, height=400)
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Valor Final", f"R$ {venda_final:,.2f}")
+        k2.metric("Custo Estimado", f"R$ {custo_final:,.2f}")
+        k3.metric("Lucro R$", f"R$ {lucro:,.2f}")
+        k4.metric("Margem Real %", f"{lucro_pct:.1f}%")
         
-        if st.button("📄 BAIXAR PDF", type="primary"):
+        if st.button("📄 BAIXAR PDF (Itens Selecionados)", type="primary"):
             class PDF(FPDF):
                 def header(self):
                     self.set_font('Arial', 'B', 14); self.cell(0, 10, 'Orcamento Comercial', 0, 1, 'C'); self.ln(5)
             pdf = PDF(); pdf.add_page(); pdf.set_font("Arial", size=10)
             pdf.cell(0, 6, f"Data: {datetime.now().strftime('%d/%m/%Y')}", 0, 1)
-            pdf.cell(0, 6, f"Projeto: {sel_vasos} Vasos | {sel_tamanho}", 0, 1); pdf.ln(5)
+            pdf.cell(0, 6, f"Config: {sel_vasos} Vasos | {sel_tamanho}", 0, 1); pdf.ln(5)
+            
             pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", 'B', 9)
             pdf.cell(80, 8, "Item", 1, 0, 'L', 1); pdf.cell(15, 8, "Qtd", 1, 0, 'C', 1)
-            pdf.cell(30, 8, "Venda Unit", 1, 0, 'R', 1); pdf.cell(35, 8, "Total", 1, 1, 'R', 1)
+            pdf.cell(30, 8, "Unit", 1, 0, 'R', 1); pdf.cell(35, 8, "Total", 1, 1, 'R', 1)
+            
             pdf.set_font("Arial", size=9)
-            for _, r in df_res.iterrows():
+            for _, r in df_final.iterrows():
                 pdf.cell(80, 7, str(r['Descrição'])[0:40], 1); pdf.cell(15, 7, str(r['Qtd']), 1, 0, 'C')
                 pdf.cell(30, 7, f"{r['Venda Unit']:,.2f}", 1, 0, 'R'); pdf.cell(35, 7, f"{r['Total Venda']:,.2f}", 1, 1, 'R')
-            pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(0, 10, f"TOTAL: R$ {venda:,.2f}", 0, 1, 'R')
+            
+            pdf.ln(5); pdf.set_font("Arial", 'B', 12); pdf.cell(0, 10, f"TOTAL: R$ {venda_final:,.2f}", 0, 1, 'R')
             temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf"); pdf.output(temp.name)
-            with open(temp.name, "rb") as f: st.download_button("📥 Download PDF", f, "orcamento.pdf")
+            with open(temp.name, "rb") as f: st.download_button("📥 Download PDF", f, "orcamento_final.pdf")
 
-# --- ABA 2: CONSTRUTOR DE KITS (NOVA) ---
+# --- ABA 2 E 3 (IGUAIS) ---
 with tab_kits:
-    st.header("🛠️ Configuração Prática de Kits")
-    
-    # 1. Selecionar ou Criar Kit
+    st.header("🛠️ Configuração de Kits")
     kits_existentes = sorted(db["Kits"]['ID_Kit'].unique())
     col_k1, col_k2 = st.columns([2, 1])
-    with col_k1:
-        kit_selecionado = st.selectbox("Selecione um Kit para editar:", kits_existentes)
+    with col_k1: kit_selecionado = st.selectbox("Selecione Kit:", kits_existentes)
     with col_k2:
-        novo_kit_nome = st.text_input("Ou crie um Novo Kit (ID):")
-        if st.button("Criar Kit") and novo_kit_nome:
-            if novo_kit_nome not in kits_existentes:
-                # Adiciona linha vazia para registrar o kit
-                novo_df = pd.DataFrame({'ID_Kit': [novo_kit_nome], 'ID_Material': [''], 'Quantidade': [0]})
-                db["Kits"] = pd.concat([db["Kits"], novo_df], ignore_index=True)
-                save_data("Kits", db["Kits"])
-                st.success(f"Kit {novo_kit_nome} criado!"); st.rerun()
-    
-    if novo_kit_nome and novo_kit_nome in kits_existentes: kit_selecionado = novo_kit_nome
+        novo_kit = st.text_input("Novo Kit (ID):")
+        if st.button("Criar") and novo_kit:
+            if novo_kit not in kits_existentes:
+                db["Kits"] = pd.concat([db["Kits"], pd.DataFrame({'ID_Kit':[novo_kit],'ID_Material':[''],'Quantidade':[0]})], ignore_index=True)
+                save_data("Kits", db["Kits"]); st.rerun()
+    if novo_kit and novo_kit in kits_existentes: kit_selecionado = novo_kit
 
-    st.divider()
-
-    # 2. Visualizar Itens do Kit
-    df_kit_atual = db["Kits"][db["Kits"]['ID_Kit'] == kit_selecionado].copy()
+    df_k = db["Kits"][db["Kits"]['ID_Kit'] == kit_selecionado].copy()
+    df_m = db["Materiais"][['ID_Material', 'Descricao']]
+    df_d = pd.merge(df_k, df_m, on='ID_Material', how='left')
     
-    # Merge para pegar nomes
-    df_materiais = db["Materiais"][['ID_Material', 'Descricao']]
-    df_display = pd.merge(df_kit_atual, df_materiais, on='ID_Material', how='left')
-    
-    # Layout de Edição
-    col_list, col_add = st.columns([2, 1])
-    
-    with col_list:
-        st.subheader(f"Itens em: {kit_selecionado}")
-        # Editor visual (Permite mudar Qtd e Excluir)
-        df_editor = st.data_editor(
-            df_display[['ID_Material', 'Descricao', 'Quantidade']],
-            column_config={
-                "ID_Material": st.column_config.TextColumn(disabled=True),
-                "Descricao": st.column_config.TextColumn(disabled=True),
-                "Quantidade": st.column_config.NumberColumn(min_value=0, format="%.2f")
-            },
-            num_rows="dynamic",
-            key="editor_kits"
-        )
-        
-        if st.button("💾 Salvar Alterações no Kit"):
-            # Lógica complexa de salvar:
-            # 1. Remove tudo desse kit do DB original
+    c_lst, c_add = st.columns([2, 1])
+    with c_lst:
+        st.subheader("Itens Atuais")
+        df_ed = st.data_editor(df_d[['ID_Material', 'Descricao', 'Quantidade']], key="edit_kit", num_rows="dynamic")
+        if st.button("💾 Salvar Kit"):
             db["Kits"] = db["Kits"][db["Kits"]['ID_Kit'] != kit_selecionado]
-            # 2. Prepara os dados editados
-            df_to_save = df_editor.copy()
-            df_to_save['ID_Kit'] = kit_selecionado
-            # 3. Reconstrói DB
-            db["Kits"] = pd.concat([db["Kits"], df_to_save[['ID_Kit', 'ID_Material', 'Quantidade']]], ignore_index=True)
-            # 4. Limpa lixo (linhas sem material)
-            db["Kits"] = db["Kits"][db["Kits"]['ID_Material'] != '']
-            save_data("Kits", db["Kits"])
-            st.rerun()
+            df_s = df_ed.copy(); df_s['ID_Kit'] = kit_selecionado
+            db["Kits"] = pd.concat([db["Kits"], df_s[['ID_Kit', 'ID_Material', 'Quantidade']]], ignore_index=True)
+            db["Kits"] = db["Kits"][db["Kits"]['ID_Material'] != '']; save_data("Kits", db["Kits"]); st.rerun()
+    with c_add:
+        st.subheader("Adicionar")
+        opt = df_m.apply(lambda x: f"{x['Descricao']} | {x['ID_Material']}", axis=1)
+        sel = st.selectbox("Material:", opt); qtd = st.number_input("Qtd:", 1.0)
+        if st.button("➕ Add"):
+            db["Kits"] = pd.concat([db["Kits"], pd.DataFrame({'ID_Kit':[kit_selecionado],'ID_Material':[sel.split(" | ")[-1]],'Quantidade':[qtd]})], ignore_index=True)
+            save_data("Kits", db["Kits"]); st.rerun()
 
-    with col_add:
-        st.subheader("Adicionar Item")
-        # Selectbox com Nome + ID para facilitar
-        opcoes_mat = df_materiais.apply(lambda x: f"{x['Descricao']} | {x['ID_Material']}", axis=1)
-        mat_escolhido = st.selectbox("Escolha o Material:", options=opcoes_mat)
-        qtd_add = st.number_input("Quantidade:", min_value=0.1, value=1.0)
-        
-        if st.button("➕ Adicionar ao Kit"):
-            id_mat_add = mat_escolhido.split(" | ")[-1]
-            novo_item = pd.DataFrame({'ID_Kit': [kit_selecionado], 'ID_Material': [id_mat_add], 'Quantidade': [qtd_add]})
-            db["Kits"] = pd.concat([db["Kits"], novo_item], ignore_index=True)
-            save_data("Kits", db["Kits"])
-            st.rerun()
-
-# --- ABA 3: BANCO DE DADOS (RAW) ---
 with tab_db:
     st.header("🗃️ Dados Brutos")
-    tabela = st.selectbox("Tabela", list(FILES.keys()))
-    df_raw = st.data_editor(db[tabela], num_rows="dynamic", use_container_width=True)
-    if st.button("Salvar Tabela Bruta"):
-        save_data(tabela, df_raw); st.rerun()
+    tab = st.selectbox("Tabela", list(FILES.keys()))
+    de = st.data_editor(db[tab], num_rows="dynamic", use_container_width=True)
+    if st.button("Salvar DB"): save_data(tab, de); st.rerun()
