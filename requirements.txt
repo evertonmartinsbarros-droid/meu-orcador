@@ -4,5 +4,7 @@ fpdf
 plotly
 gspread
 google-auth
+xlsxwriter
+
 
 
