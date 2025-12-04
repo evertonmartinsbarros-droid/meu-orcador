@@ -5,6 +5,8 @@ plotly
 gspread
 google-auth
 xlsxwriter
+Pillow
+
 
 
 
