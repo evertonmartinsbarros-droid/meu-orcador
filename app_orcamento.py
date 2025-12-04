@@ -18,37 +18,37 @@ except ImportError:
     PLOTLY_ATIVO = False
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO GERAL & TEMA ESCURO
+# 1. CONFIGURAÇÃO GERAL & TEMA CLARO
 # ==============================================================================
 st.set_page_config(page_title="Gerador de Propostas", page_icon="💼", layout="wide")
 
 st.markdown("""
 <style>
-    /* Fundo Geral */
+    /* Fundo Geral - VOLTANDO AO CLARO */
     .stApp {
-        background-color: #0E1117;
-        color: #FAFAFA; /* Cor base do texto */
+        background-color: #F4F6F9; /* Cinza claro */
+        color: #2C3E50; /* Cor base do texto */
     }
     
-    /* Cartões de Métricas (KPIs) */
+    /* Cartões de Métricas (KPIs) - VOLTANDO AO BRANCO */
     div[data-testid="stMetric"] {
-        background-color: #262730;
-        border: 1px solid #31333F;
+        background-color: #FFFFFF;
+        border: 1px solid #E6E9EF;
         padding: 20px;
         border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
     
-    /* Cor do Valor (Dinheiro) - Verde Neon para destaque */
+    /* Cor do Valor (Dinheiro) - VOLTANDO AO AZUL ESCURO */
     [data-testid="stMetricValue"] {
         font-size: 28px;
-        color: #00CC96; 
+        color: #2C3E50; 
         font-weight: 800;
     }
     
     /* Cor do Título da Métrica */
     [data-testid="stMetricLabel"] {
-        color: #B2B5BE;
+        color: #6C757D;
     }
 
     /* Botões */
@@ -63,14 +63,14 @@ st.markdown("""
     
     /* Tabelas */
     .stDataFrame {
-        border: 1px solid #31333F;
+        border: 1px solid #ddd;
         border-radius: 10px;
         overflow: hidden;
     }
     
     /* Ajuste de Inputs para ficarem visíveis */
     .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-        color: #FAFAFA;
+        color: #2C3E50; /* Cor escura para texto no input */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -400,14 +400,14 @@ with tabs[0]:
                 st.markdown("#### 🍰 Distribuição do Lucro")
                 if PLOTLY_ATIVO and lc > 0:
                     g = fin.groupby("Grupo")[["Total Venda", "Total Custo"]].sum().reset_index(); g["L"] = g["Total Venda"] - g["Total Custo"]
-                    # CORREÇÃO DA LEGENDA: Forçando fundo escuro e fonte branca
+                    # VOLTANDO AO TEMA CLARO PARA PLOTLY
                     fig = px.pie(g, values="L", names="Grupo", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
                     fig.update_layout(
                         margin=dict(t=0,b=0,l=0,r=0), 
                         height=250, 
-                        paper_bgcolor='#0E1117', # Fundo do gráfico
-                        plot_bgcolor='#0E1117', # Fundo da área de plotagem
-                        font=dict(color='#FFFFFF') # Cor da fonte (legenda e tooltips)
+                        paper_bgcolor='rgba(0,0,0,0)', # Transparente para usar fundo do App
+                        plot_bgcolor='rgba(0,0,0,0)', # Transparente
+                        font=dict(color='#000000') # Fonte preta para fundo claro
                     ); 
                     st.plotly_chart(fig, use_container_width=True)
 
