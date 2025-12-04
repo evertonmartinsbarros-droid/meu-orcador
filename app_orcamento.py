@@ -18,60 +18,17 @@ except ImportError:
     PLOTLY_ATIVO = False
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO GERAL & TEMA CLARO
+# 1. CONFIGURAÇÃO GERAL
 # ==============================================================================
 st.set_page_config(page_title="Gerador de Propostas", page_icon="💼", layout="wide")
 
 st.markdown("""
 <style>
-    /* Fundo Geral - CLARO */
-    .stApp {
-        background-color: #F4F6F9; 
-        color: #2C3E50; 
-    }
-    
-    /* Cartões de Métricas (KPIs) */
-    div[data-testid="stMetric"] {
-        background-color: #FFFFFF;
-        border: 1px solid #E6E9EF;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
-    
-    /* Cor do Valor (Dinheiro) */
-    [data-testid="stMetricValue"] {
-        font-size: 28px;
-        color: #2C3E50; 
-        font-weight: 800;
-    }
-    
-    /* Cor do Título da Métrica */
-    [data-testid="stMetricLabel"] {
-        color: #6C757D;
-    }
-
-    /* Botões */
-    .stButton button {
-        width: 100%;
-        font-weight: bold;
-        border-radius: 8px;
-        height: 45px;
-        color: #FFFFFF;
-        border: 1px solid #4A4E5A;
-    }
-    
-    /* Tabelas */
-    .stDataFrame {
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    /* Ajuste de Inputs */
-    .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-        color: #2C3E50; 
-    }
+    .stApp { background-color: #F4F6F9; }
+    div[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #E6E9EF; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    [data-testid="stMetricValue"] { font-size: 28px; color: #2C3E50; font-weight: 800; }
+    .stButton button { width: 100%; font-weight: bold; border-radius: 8px; height: 45px; }
+    .stDataFrame { border: 1px solid #ddd; border-radius: 10px; overflow: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -283,7 +240,7 @@ class PropostaPDF(FPDF):
         self.cell(95, 5, self.emp['nome'], 0, 0, 'C'); self.cell(95, 5, "Cliente", 0, 1, 'C')
 
 def convert_df_to_excel(df):
-    # AQUI ESTÁ A CORREÇÃO: Removemos a coluna 'Incluir' antes de exportar
+    # --- CORREÇÃO: Remove a coluna 'Incluir' antes de gerar o Excel ---
     df_clean = df.drop(columns=['Incluir'], errors='ignore')
 
     output = io.BytesIO()
@@ -403,14 +360,14 @@ with tabs[0]:
                 st.markdown("#### 🍰 Distribuição do Lucro")
                 if PLOTLY_ATIVO and lc > 0:
                     g = fin.groupby("Grupo")[["Total Venda", "Total Custo"]].sum().reset_index(); g["L"] = g["Total Venda"] - g["Total Custo"]
-                    # VOLTANDO AO TEMA CLARO PARA PLOTLY
+                    # MANTIDO O TEMA CLARO NAS LEGENDAS
                     fig = px.pie(g, values="L", names="Grupo", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
                     fig.update_layout(
                         margin=dict(t=0,b=0,l=0,r=0), 
                         height=250, 
                         paper_bgcolor='rgba(0,0,0,0)', 
                         plot_bgcolor='rgba(0,0,0,0)', 
-                        font=dict(color='#000000') 
+                        font=dict(color='#000000') # Fonte preta (legenda visível no fundo claro)
                     ); 
                     st.plotly_chart(fig, use_container_width=True)
 
