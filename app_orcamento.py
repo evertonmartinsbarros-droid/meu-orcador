@@ -6,6 +6,7 @@ import tempfile
 import os
 import gspread
 from google.oauth2.service_account import Credentials
+import io # Importante para o Excel
 
 # --- SEGURANÇA PLOTLY ---
 try:
@@ -50,14 +51,11 @@ DEFAULT_DATA = {
 }
 
 def get_google_connection():
-    """Conecta ao Google Sheets usando st.secrets"""
     try:
-        # Escopos necessários (Sheets + Drive)
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
         ]
-        
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
@@ -74,7 +72,6 @@ def load_data_from_sheets():
     dataframes = {}
     try:
         sheet = client.open("Sistema_Orcamento_DB")
-        
         for key, tab_name in SHEET_TABS.items():
             try:
                 worksheet = sheet.worksheet(tab_name)
@@ -144,7 +141,7 @@ with st.sidebar:
     if not st.session_state.admin_logged_in: logo, en, ee, et, em, es = None, "Empresa", "", "", "", ""
 
 # ==============================================================================
-# 4. CLASSE PDF
+# 4. CLASSE PDF & EXCEL
 # ==============================================================================
 class PropostaPDF(FPDF):
     def __init__(self, emp, cli, logo=None):
@@ -183,6 +180,18 @@ class PropostaPDF(FPDF):
         self.set_font('Arial', '', 10); self.multi_cell(0, 6, f"Prazo: {self.cli['prazo']}\nPag: {self.cli['pagamento']}")
         self.ln(20); y = self.get_y(); self.line(20, y, 90, y); self.line(120, y, 190, y)
         self.cell(95, 5, self.emp['nome'], 0, 0, 'C'); self.cell(95, 5, "Cliente", 0, 1, 'C')
+
+def convert_df_to_excel(df):
+    """Converte o DataFrame para Excel em memória"""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Orcamento')
+        # Ajuste automático de largura das colunas (Opcional, mas fica bonito)
+        worksheet = writer.sheets['Orcamento']
+        for i, col in enumerate(df.columns):
+            width = max(df[col].astype(str).map(len).max(), len(col)) + 2
+            worksheet.set_column(i, i, width)
+    return output.getvalue()
 
 # ==============================================================================
 # 5. CÁLCULO
@@ -292,16 +301,32 @@ with tabs[0]:
             with st.expander("📝 Cliente", expanded=False):
                 cc1, cc2 = st.columns(2); cn = cc1.text_input("Nome", "Cliente", key="c_n"); cp = cc2.text_input("Projeto", "Proj", key="c_p")
                 cc3, cc4, cc5 = st.columns(3); cv = cc3.text_input("Validade", "10 dias", key="c_v"); cpr = cc4.text_input("Prazo", "30 dias", key="c_pr"); cpg = cc5.text_input("Pagto", "50/50", key="c_pg")
-
-            if st.button("📄 PDF", type="primary", key="btn_pdf"):
-                lt = None
-                if logo:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f: f.write(logo.read()); lt = f.name
-                pdf = PropostaPDF({'nome':en, 'endereco':ee, 'telefone':et, 'email':em, 'site':es}, {'nome':cn, 'projeto':cp, 'validade':cv, 'prazo':cpr, 'pagamento':cpg}, lt)
-                pdf.add_page(); pdf.chapter_info(); pdf.chapter_tab(fin); pdf.chapter_end()
-                pf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf"); pdf.output(pf.name)
-                with open(pf.name, "rb") as f: st.download_button("Download PDF", f, "orc.pdf")
-                if lt: os.remove(lt)
+            
+            # --- ÁREA DE DOWNLOADS (PDF E EXCEL) ---
+            st.divider()
+            col_pdf, col_xls = st.columns(2)
+            
+            with col_pdf:
+                if st.button("📄 Gerar PDF da Proposta", type="primary", key="btn_pdf", use_container_width=True):
+                    lt = None
+                    if logo:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f: f.write(logo.read()); lt = f.name
+                    pdf = PropostaPDF({'nome':en, 'endereco':ee, 'telefone':et, 'email':em, 'site':es}, {'nome':cn, 'projeto':cp, 'validade':cv, 'prazo':cpr, 'pagamento':cpg}, lt)
+                    pdf.add_page(); pdf.chapter_info(); pdf.chapter_tab(fin); pdf.chapter_end()
+                    pf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf"); pdf.output(pf.name)
+                    with open(pf.name, "rb") as f: st.download_button("📥 Baixar PDF Agora", f, f"Proposta_{cn}.pdf", mime="application/pdf", key="dl_pdf_real", type="secondary", use_container_width=True)
+                    if lt: os.remove(lt)
+            
+            with col_xls:
+                # Gera o arquivo Excel em memória
+                excel_data = convert_df_to_excel(fin)
+                st.download_button(
+                    label="📥 Baixar Tabela Excel (.xlsx)",
+                    data=excel_data,
+                    file_name=f"Orcamento_{cn}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
 
 if st.session_state.admin_logged_in:
     with tabs[1]:
@@ -361,8 +386,6 @@ if st.session_state.admin_logged_in:
     with tabs[2]:
         st.header("🗃️ Banco de Dados (Nuvem)")
         st.info("⚠️ Qualquer alteração aqui reflete na Planilha Google.")
-        # --- AQUI ESTAVA O ERRO DE NAME ERROR ---
-        # CORRIGIDO: usando SHEET_TABS.keys() em vez de FILES.keys()
         t = st.selectbox("Tabela", list(SHEET_TABS.keys()), key="sel_tab_cloud")
         
         ed = st.data_editor(db[t], num_rows="dynamic", use_container_width=True, key="cloud_editor")
