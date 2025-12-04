@@ -7,7 +7,8 @@ import os
 import gspread
 from google.oauth2.service_account import Credentials
 import io
-import base64 # Necessário para salvar a logo
+import base64
+from PIL import Image # Nova biblioteca para tratar a imagem
 
 # --- SEGURANÇA PLOTLY ---
 try:
@@ -41,10 +42,9 @@ SHEET_TABS = {
     "Config_Acionamentos": "db_conf_acion",
     "Config_Vasos": "db_conf_vasos",
     "Config_Hidraulica": "db_conf_hidra",
-    "Config_Geral": "db_config" # Nova aba
+    "Config_Geral": "db_config"
 }
 
-# Estrutura padrão para caso a planilha esteja vazia
 DEFAULT_DATA = {
     "Materiais": {'ID_Material': ['CLP-PADRAO'], 'Descricao': ['Material Exemplo'], 'Grupo_Orcamento': ['Geral'], 'Preco_Custo': [100.0]},
     "Kits": {'ID_Kit': [], 'ID_Material': [], 'Quantidade': []},
@@ -82,14 +82,12 @@ def load_data_from_sheets():
                 worksheet = sheet.worksheet(tab_name)
                 data = worksheet.get_all_records()
                 df = pd.DataFrame(data)
-                # Conversões numéricas básicas
                 if 'Preco_Custo' in df.columns: df['Preco_Custo'] = pd.to_numeric(df['Preco_Custo'], errors='coerce').fillna(0)
                 if 'Quantidade' in df.columns: df['Quantidade'] = pd.to_numeric(df['Quantidade'], errors='coerce').fillna(0)
                 dataframes[key] = df
             except:
                 dataframes[key] = pd.DataFrame()
         
-        # Garante que Config_Geral tenha pelo menos uma linha
         if dataframes.get("Config_Geral", pd.DataFrame()).empty:
              dataframes["Config_Geral"] = pd.DataFrame(DEFAULT_DATA["Config_Geral"])
              
@@ -106,37 +104,41 @@ def save_data_to_sheets(key, df):
         tab_name = SHEET_TABS[key]
         worksheet = sheet.worksheet(tab_name)
         worksheet.clear()
-        
-        # Converte Dataframe para lista de listas (handling headers)
         body = [df.columns.values.tolist()] + df.values.tolist()
         worksheet.update(values=body)
-        
         st.toast(f"✅ {key} salvo na nuvem!", icon="☁️")
-        load_data_from_sheets.clear() # Limpa cache para atualizar na hora
+        load_data_from_sheets.clear()
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
 
-# CARREGA OS DADOS
 db = load_data_from_sheets()
-
-# --- RECUPERA CONFIGURAÇÕES GERAIS ---
 config_row = db["Config_Geral"].iloc[0] if not db["Config_Geral"].empty else DEFAULT_DATA["Config_Geral"].iloc[0]
 
-# --- FUNÇÕES AUXILIARES DE IMAGEM ---
+# --- FUNÇÕES DE IMAGEM CORRIGIDAS ---
 def image_to_base64(uploaded_file):
-    """Converte arquivo enviado para string base64"""
+    """Redimensiona e converte imagem para Base64 leve"""
     if uploaded_file is None: return ""
     try:
-        bytes_data = uploaded_file.getvalue()
-        # Verifica tamanho (aprox 45kb limite seguro para célula do Sheets)
-        if len(bytes_data) > 50000:
-            st.warning("⚠️ Imagem muito grande para salvar no banco de dados. Use uma imagem menor (max 40kb).")
-            return ""
-        return base64.b64encode(bytes_data).decode()
-    except: return ""
+        # Abre a imagem usando PIL
+        img = Image.open(uploaded_file)
+        
+        # Converte para RGB (caso seja PNG com transparência, evita erros no JPEG)
+        if img.mode in ("RGBA", "P"): img = img.convert("RGB")
+        
+        # Redimensiona (thumbnail mantém proporção)
+        img.thumbnail((200, 200)) 
+        
+        # Salva em memória como JPEG (mais leve)
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=80)
+        
+        # Converte para Base64
+        return base64.b64encode(buffer.getvalue()).decode()
+    except Exception as e:
+        st.error(f"Erro ao processar imagem: {e}")
+        return ""
 
 def base64_to_image(base64_string):
-    """Converte string base64 para bytes para mostrar na tela/PDF"""
     if not base64_string or base64_string == "nan": return None
     try:
         return base64.b64decode(base64_string)
@@ -164,7 +166,6 @@ with st.sidebar:
         if st.button("Sair"): logout()
         st.divider()
         
-        # --- EDITOR DE DADOS DA EMPRESA (COM PERSISTÊNCIA) ---
         with st.expander("🏢 Dados da Empresa", expanded=True):
             en = st.text_input("Nome", config_row.get("Empresa_Nome", ""))
             ee = st.text_input("End", config_row.get("Empresa_End", ""))
@@ -174,24 +175,22 @@ with st.sidebar:
             
             st.markdown("---")
             st.write("📷 Logomarca")
-            # Mostra logo atual se existir
             current_logo_b64 = str(config_row.get("Logo_Base64", ""))
             if current_logo_b64 and current_logo_b64 != "nan":
                 img_bytes = base64_to_image(current_logo_b64)
                 if img_bytes: st.image(img_bytes, width=100, caption="Atual")
             
-            new_logo = st.file_uploader("Trocar Logo (Pequena)", type=['png', 'jpg'])
+            new_logo = st.file_uploader("Trocar Logo", type=['png', 'jpg'])
 
             if st.button("💾 Salvar Dados Empresa"):
-                # Prepara nova linha de configuração
                 new_conf = config_row.to_dict()
                 new_conf.update({"Empresa_Nome": en, "Empresa_End": ee, "Empresa_Tel": et, "Empresa_Email": em, "Empresa_Site": es})
                 
                 if new_logo:
+                    # Agora usa a função com compressão
                     b64_str = image_to_base64(new_logo)
                     if b64_str: new_conf["Logo_Base64"] = b64_str
                 
-                # Salva no DB
                 df_conf = pd.DataFrame([new_conf])
                 save_data_to_sheets("Config_Geral", df_conf)
                 st.rerun()
@@ -201,13 +200,9 @@ with st.sidebar:
             load_data_from_sheets.clear()
             st.rerun()
 
-    # Variáveis para uso no PDF (Fallback para vazio se não logado)
     if not st.session_state.admin_logged_in:
         en, ee, et, em, es = "Empresa", "", "", "", ""
         current_logo_b64 = None
-    else:
-        # Se logado, já pegamos ali em cima, mas precisamos garantir atualização se não salvou
-        pass 
 
 # ==============================================================================
 # 4. CLASSE PDF & EXCEL
@@ -219,8 +214,7 @@ class PropostaPDF(FPDF):
         if self.page_no() == 1:
             if self.logo_bytes:
                 try:
-                    # Gambiarra técnica: FPDF precisa de arquivo físico. Criamos um temporário.
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as f:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f:
                         f.write(self.logo_bytes)
                         tmp_logo_path = f.name
                     self.image(tmp_logo_path, 10, 8, 33)
@@ -330,11 +324,9 @@ with tabs[0]:
         
         st.divider()
         with st.expander("⚙️ Margens e Salvar (%)", expanded=True):
-            # CARREGA VALORES SALVOS NO DB
             def_m = lambda k, d: float(config_row.get(k, d))
             
             cm = st.columns(7)
-            # Input com valor padrão vindo do banco de dados
             m_clp = cm[0].number_input("CLP", 0, 500, int(def_m("Margem_CLP", 50)), key="m_clp")
             m_pnl = cm[1].number_input("Painel", 0, 500, int(def_m("Margem_Painel", 50)), key="m_pnl")
             m_hid = cm[2].number_input("Peças Hidr.", 0, 500, int(def_m("Margem_Hidra", 50)), key="m_hid_peca")
@@ -343,14 +335,12 @@ with tabs[0]:
             m_prg = cm[5].number_input("MDO Prog.", 0, 500, int(def_m("Margem_MDO_Prog", 50)), key="m_mdo_prog")
             m_mhi = cm[6].number_input("MDO Hidr.", 0, 500, int(def_m("Margem_MDO_Hidr", 50)), key="m_mdo_hidr")
             
-            # Botão para salvar novas margens como padrão
             if st.button("💾 Salvar Margens como Padrão"):
                 new_conf = config_row.to_dict()
                 new_conf.update({
                     "Margem_CLP": m_clp, "Margem_Painel": m_pnl, "Margem_Hidra": m_hid, "Margem_Vasos": m_vas,
                     "Margem_MDO_Elet": m_ele, "Margem_MDO_Prog": m_prg, "Margem_MDO_Hidr": m_mhi
                 })
-                # Mantém dados da empresa que já estavam lá
                 df_conf = pd.DataFrame([new_conf])
                 save_data_to_sheets("Config_Geral", df_conf)
                 st.rerun()
@@ -391,9 +381,7 @@ with tabs[0]:
             
             with col_pdf:
                 if st.button("📄 PDF Proposta", type="primary", key="btn_pdf", use_container_width=True):
-                    # Tenta carregar logo do banco de dados
                     logo_bytes = base64_to_image(str(config_row.get("Logo_Base64", "")))
-                    
                     pdf = PropostaPDF({'nome':config_row.get("Empresa_Nome", ""), 
                                        'endereco':config_row.get("Empresa_End", ""), 
                                        'telefone':config_row.get("Empresa_Tel", ""), 
