@@ -8,7 +8,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import io
 import base64
-from PIL import Image
+from PIL import Image # Nova biblioteca para tratar a imagem
 
 # --- SEGURANÇA PLOTLY ---
 try:
@@ -18,60 +18,17 @@ except ImportError:
     PLOTLY_ATIVO = False
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO GERAL & TEMA CLARO
+# 1. CONFIGURAÇÃO GERAL
 # ==============================================================================
 st.set_page_config(page_title="Gerador de Propostas", page_icon="💼", layout="wide")
 
 st.markdown("""
 <style>
-    /* Fundo Geral - VOLTANDO AO CLARO */
-    .stApp {
-        background-color: #F4F6F9; /* Cinza claro */
-        color: #2C3E50; /* Cor base do texto */
-    }
-    
-    /* Cartões de Métricas (KPIs) - VOLTANDO AO BRANCO */
-    div[data-testid="stMetric"] {
-        background-color: #FFFFFF;
-        border: 1px solid #E6E9EF;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
-    
-    /* Cor do Valor (Dinheiro) - VOLTANDO AO AZUL ESCURO */
-    [data-testid="stMetricValue"] {
-        font-size: 28px;
-        color: #2C3E50; 
-        font-weight: 800;
-    }
-    
-    /* Cor do Título da Métrica */
-    [data-testid="stMetricLabel"] {
-        color: #6C757D;
-    }
-
-    /* Botões */
-    .stButton button {
-        width: 100%;
-        font-weight: bold;
-        border-radius: 8px;
-        height: 45px;
-        color: #FFFFFF;
-        border: 1px solid #4A4E5A;
-    }
-    
-    /* Tabelas */
-    .stDataFrame {
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    /* Ajuste de Inputs para ficarem visíveis */
-    .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
-        color: #2C3E50; /* Cor escura para texto no input */
-    }
+    .stApp { background-color: #F4F6F9; }
+    div[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #E6E9EF; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    [data-testid="stMetricValue"] { font-size: 28px; color: #2C3E50; font-weight: 800; }
+    .stButton button { width: 100%; font-weight: bold; border-radius: 8px; height: 45px; }
+    .stDataFrame { border: 1px solid #ddd; border-radius: 10px; overflow: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -157,15 +114,25 @@ def save_data_to_sheets(key, df):
 db = load_data_from_sheets()
 config_row = db["Config_Geral"].iloc[0] if not db["Config_Geral"].empty else DEFAULT_DATA["Config_Geral"].iloc[0]
 
-# --- FUNÇÕES DE IMAGEM ---
+# --- FUNÇÕES DE IMAGEM CORRIGIDAS ---
 def image_to_base64(uploaded_file):
+    """Redimensiona e converte imagem para Base64 leve"""
     if uploaded_file is None: return ""
     try:
+        # Abre a imagem usando PIL
         img = Image.open(uploaded_file)
+        
+        # Converte para RGB (caso seja PNG com transparência, evita erros no JPEG)
         if img.mode in ("RGBA", "P"): img = img.convert("RGB")
+        
+        # Redimensiona (thumbnail mantém proporção)
         img.thumbnail((200, 200)) 
+        
+        # Salva em memória como JPEG (mais leve)
         buffer = io.BytesIO()
         img.save(buffer, format="JPEG", quality=80)
+        
+        # Converte para Base64
         return base64.b64encode(buffer.getvalue()).decode()
     except Exception as e:
         st.error(f"Erro ao processar imagem: {e}")
@@ -220,6 +187,7 @@ with st.sidebar:
                 new_conf.update({"Empresa_Nome": en, "Empresa_End": ee, "Empresa_Tel": et, "Empresa_Email": em, "Empresa_Site": es})
                 
                 if new_logo:
+                    # Agora usa a função com compressão
                     b64_str = image_to_base64(new_logo)
                     if b64_str: new_conf["Logo_Base64"] = b64_str
                 
@@ -400,16 +368,8 @@ with tabs[0]:
                 st.markdown("#### 🍰 Distribuição do Lucro")
                 if PLOTLY_ATIVO and lc > 0:
                     g = fin.groupby("Grupo")[["Total Venda", "Total Custo"]].sum().reset_index(); g["L"] = g["Total Venda"] - g["Total Custo"]
-                    # VOLTANDO AO TEMA CLARO PARA PLOTLY
                     fig = px.pie(g, values="L", names="Grupo", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-                    fig.update_layout(
-                        margin=dict(t=0,b=0,l=0,r=0), 
-                        height=250, 
-                        paper_bgcolor='rgba(0,0,0,0)', # Transparente para usar fundo do App
-                        plot_bgcolor='rgba(0,0,0,0)', # Transparente
-                        font=dict(color='#000000') # Fonte preta para fundo claro
-                    ); 
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig.update_layout(margin=dict(t=0,b=0,l=0,r=0), height=250); st.plotly_chart(fig, use_container_width=True)
 
             st.divider()
             with st.expander("📝 Cliente", expanded=False):
