@@ -27,7 +27,7 @@ st.markdown("""
     /* Fundo Geral */
     .stApp {
         background-color: #0E1117;
-        color: #FAFAFA;
+        color: #FAFAFA; /* Cor base do texto */
     }
     
     /* Cartões de Métricas (KPIs) */
@@ -68,7 +68,7 @@ st.markdown("""
         overflow: hidden;
     }
     
-    /* Ajuste de Inputs para ficarem bonitos no escuro */
+    /* Ajuste de Inputs para ficarem visíveis */
     .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
         color: #FAFAFA;
     }
@@ -400,8 +400,16 @@ with tabs[0]:
                 st.markdown("#### 🍰 Distribuição do Lucro")
                 if PLOTLY_ATIVO and lc > 0:
                     g = fin.groupby("Grupo")[["Total Venda", "Total Custo"]].sum().reset_index(); g["L"] = g["Total Venda"] - g["Total Custo"]
+                    # CORREÇÃO DA LEGENDA: Forçando fundo escuro e fonte branca
                     fig = px.pie(g, values="L", names="Grupo", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-                    fig.update_layout(margin=dict(t=0,b=0,l=0,r=0), height=250, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='#FAFAFA')); st.plotly_chart(fig, use_container_width=True)
+                    fig.update_layout(
+                        margin=dict(t=0,b=0,l=0,r=0), 
+                        height=250, 
+                        paper_bgcolor='#0E1117', # Fundo do gráfico
+                        plot_bgcolor='#0E1117', # Fundo da área de plotagem
+                        font=dict(color='#FFFFFF') # Cor da fonte (legenda e tooltips)
+                    ); 
+                    st.plotly_chart(fig, use_container_width=True)
 
             st.divider()
             with st.expander("📝 Cliente", expanded=False):
