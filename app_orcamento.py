@@ -18,84 +18,64 @@ except ImportError:
     PLOTLY_ATIVO = False
 
 # ==============================================================================
-# 1. CONFIGURAÇÃO GERAL, TEMA CLARO & ANIMAÇÕES
+# 1. CONFIGURAÇÃO GERAL
 # ==============================================================================
 st.set_page_config(page_title="Gerador de Propostas", page_icon="💼", layout="wide")
 
 st.markdown("""
 <style>
-    /* --- CONFIGURAÇÃO BASE (CLARO) --- */
+    /* Fundo Geral - CLARO */
     .stApp { 
         background-color: #F4F6F9; 
-        color: #2C3E50; 
     }
     
-    /* --- ANIMAÇÃO DOS CARDS (METRICAS) --- */
+    /* Cartões de Métricas (KPIs) */
     div[data-testid="stMetric"] {
         background-color: #FFFFFF;
         border: 1px solid #E6E9EF;
         padding: 20px;
         border-radius: 12px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        transition: all 0.3s ease; /* Suaviza a animação */
-        cursor: default;
     }
     
-    div[data-testid="stMetric"]:hover {
-        transform: translateY(-5px); /* Faz o card "flutuar" para cima */
-        box-shadow: 0 10px 20px rgba(0,0,0,0.15); /* Sombra mais forte */
-        border-color: #00CC96; /* Borda verde neon sutil ao passar o mouse */
-    }
-    
-    [data-testid="stMetricValue"] { 
-        font-size: 28px; 
+    /* Cor do Valor (Dinheiro) */
+    [data-testid="stMetricValue"] {
+        font-size: 28px;
         color: #2C3E50; 
-        font-weight: 800; 
+        font-weight: 800;
     }
     
+    /* Cor do Título da Métrica */
     [data-testid="stMetricLabel"] {
         color: #6C757D;
     }
 
-    /* --- ANIMAÇÃO DOS BOTÕES --- */
+    /* --- CORREÇÃO DOS BOTÕES --- */
     .stButton button {
         width: 100%;
         font-weight: bold;
         border-radius: 8px;
         height: 45px;
-        color: #FFFFFF;
-        border: 1px solid #4A4E5A;
-        transition: all 0.2s ease-in-out;
+        background-color: #FFFFFF; /* Fundo Branco */
+        color: #2C3E50; /* Texto Escuro (Azul Marinho) */
+        border: 1px solid #D1D5DB; /* Borda Cinza */
+        transition: all 0.2s;
     }
     
     .stButton button:hover {
-        transform: scale(1.02); /* Aumenta levemente */
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        border-color: #0068C9; /* Borda Azul ao passar o mouse */
+        color: #0068C9; /* Texto Azul ao passar o mouse */
+        background-color: #F0F2F6; /* Fundo cinza bem clarinho */
     }
     
-    /* --- ANIMAÇÃO DO GRÁFICO (CONTAINER) --- */
-    div[data-testid="stPlotlyChart"] {
-        background-color: #FFFFFF;
-        border-radius: 12px;
-        padding: 10px;
-        transition: all 0.3s ease;
-        border: 1px solid transparent;
+    /* Tabelas */
+    .stDataFrame {
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        overflow: hidden;
     }
     
-    div[data-testid="stPlotlyChart"]:hover {
-        transform: scale(1.01); /* Leve zoom no gráfico todo */
-        box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-        border: 1px solid #E6E9EF;
-    }
-
-    /* --- TABELAS --- */
-    .stDataFrame { 
-        border: 1px solid #ddd; 
-        border-radius: 10px; 
-        overflow: hidden; 
-    }
-    
-    /* --- INPUTS --- */
+    /* Ajuste de Inputs */
     .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
         color: #2C3E50; 
     }
@@ -311,7 +291,6 @@ class PropostaPDF(FPDF):
 
 def convert_df_to_excel(df):
     df_clean = df.drop(columns=['Incluir'], errors='ignore')
-
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_clean.to_excel(writer, index=False, sheet_name='Orcamento')
@@ -429,7 +408,6 @@ with tabs[0]:
                 st.markdown("#### 🍰 Distribuição do Lucro")
                 if PLOTLY_ATIVO and lc > 0:
                     g = fin.groupby("Grupo")[["Total Venda", "Total Custo"]].sum().reset_index(); g["L"] = g["Total Venda"] - g["Total Custo"]
-                    # COR MANTIDA PRETA (PADRÃO TEMA CLARO)
                     fig = px.pie(g, values="L", names="Grupo", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
                     fig.update_layout(
                         margin=dict(t=0,b=0,l=0,r=0), 
