@@ -30,9 +30,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. CONEXÃO COM GOOGLE SHEETS
+# 2. CONEXÃO COM GOOGLE SHEETS (CORRIGIDA)
 # ==============================================================================
-# Mapeamento: Nome Interno -> Nome da Aba na Planilha Google
 SHEET_TABS = {
     "Materiais": "db_materiais",
     "MaoDeObra": "db_mdo",
@@ -42,19 +41,23 @@ SHEET_TABS = {
     "Config_Hidraulica": "db_conf_hidra"
 }
 
-# Dados Padrão (Fallback caso a planilha falhe)
 DEFAULT_DATA = {
     "Materiais": {'ID_Material': ['CLP-PADRAO'], 'Descricao': ['Material Exemplo'], 'Grupo_Orcamento': ['Geral'], 'Preco_Custo': [100.0]},
-    "Kits": {'ID_Kit': [], 'ID_Material': [], 'Quantidade': []}
-    # (Resumido para economizar espaço, o foco é a conexão)
+    "Kits": {'ID_Kit': [], 'ID_Material': [], 'Quantidade': []},
+    "Config_Vasos": pd.DataFrame(), # Fallback vazio para evitar erro de chave
+    "Config_Hidraulica": pd.DataFrame(),
+    "Config_Acionamentos": pd.DataFrame()
 }
 
 def get_google_connection():
     """Conecta ao Google Sheets usando st.secrets"""
     try:
-        # Define escopos
-        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-        # Carrega credenciais dos Segredos do Streamlit
+        # --- AQUI ESTAVA O ERRO: FALTAVA O ESCOPO DO DRIVE ---
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
@@ -63,15 +66,14 @@ def get_google_connection():
         st.error(f"Erro na conexão com Google: {e}")
         return None
 
-# Função de Cache para não ler a planilha a cada clique (otimização)
-@st.cache_data(ttl=60) # Atualiza a cada 60 segundos ou quando limparmos o cache
+@st.cache_data(ttl=60)
 def load_data_from_sheets():
     client = get_google_connection()
-    if not client: return {k: pd.DataFrame(v) for k,v in DEFAULT_DATA.items()}
+    # Se falhar a conexão, retorna dados vazios seguros para não quebrar o app
+    if not client: return {k: pd.DataFrame(v) if isinstance(v, dict) else v for k,v in DEFAULT_DATA.items()}
     
     dataframes = {}
     try:
-        # Abre a planilha pelo nome
         sheet = client.open("Sistema_Orcamento_DB")
         
         for key, tab_name in SHEET_TABS.items():
@@ -79,44 +81,35 @@ def load_data_from_sheets():
                 worksheet = sheet.worksheet(tab_name)
                 data = worksheet.get_all_records()
                 df = pd.DataFrame(data)
-                # Garante tipos numéricos onde necessário
                 if 'Preco_Custo' in df.columns: df['Preco_Custo'] = pd.to_numeric(df['Preco_Custo'], errors='coerce').fillna(0)
                 if 'Quantidade' in df.columns: df['Quantidade'] = pd.to_numeric(df['Quantidade'], errors='coerce').fillna(0)
                 dataframes[key] = df
             except:
-                dataframes[key] = pd.DataFrame() # Retorna vazio se aba não existir
+                dataframes[key] = pd.DataFrame()
         return dataframes
     except Exception as e:
         st.error(f"Erro ao ler planilha: {e}")
-        return {k: pd.DataFrame(v) for k,v in DEFAULT_DATA.items()}
+        return {k: pd.DataFrame(v) if isinstance(v, dict) else v for k,v in DEFAULT_DATA.items()}
 
 def save_data_to_sheets(key, df):
-    """Salva o DataFrame de volta na aba específica"""
     client = get_google_connection()
     if not client: return
-    
     try:
         sheet = client.open("Sistema_Orcamento_DB")
         tab_name = SHEET_TABS[key]
         worksheet = sheet.worksheet(tab_name)
-        
-        # Limpa e escreve
         worksheet.clear()
-        # Prepara dados (cabeçalho + valores)
         body = [df.columns.values.tolist()] + df.values.tolist()
-        worksheet.update(values=body) # update simples
-        
+        worksheet.update(values=body)
         st.toast(f"✅ {key} salvo na nuvem!", icon="☁️")
-        # Limpa o cache para recarregar os dados novos imediatamente
         load_data_from_sheets.clear()
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
 
-# CARREGA OS DADOS INICIAIS
 db = load_data_from_sheets()
 
 # ==============================================================================
-# 3. LOGIN & ESTRUTURA (Mantida da V21)
+# 3. LOGIN & ESTRUTURA
 # ==============================================================================
 if 'admin_logged_in' not in st.session_state: st.session_state.admin_logged_in = False
 
@@ -144,7 +137,6 @@ with st.sidebar:
             et = st.text_input("Tel", "(11) 999")
             em = st.text_input("Email", "contato@")
             es = st.text_input("Site", "www")
-        
         st.divider()
         if st.button("🔄 Recarregar Dados da Nuvem"):
             load_data_from_sheets.clear()
@@ -153,7 +145,7 @@ with st.sidebar:
     if not st.session_state.admin_logged_in: logo, en, ee, et, em, es = None, "Empresa", "", "", "", ""
 
 # ==============================================================================
-# 4. CLASSE PDF (Mantida)
+# 4. CLASSE PDF
 # ==============================================================================
 class PropostaPDF(FPDF):
     def __init__(self, emp, cli, logo=None):
@@ -198,7 +190,6 @@ class PropostaPDF(FPDF):
 # ==============================================================================
 def calc(n, t, d, m):
     try:
-        # Verifica se as tabelas carregaram
         if db["Materiais"].empty or db["Config_Acionamentos"].empty: return None
 
         rp = db["Config_Acionamentos"][db["Config_Acionamentos"]['Num_Vasos'] == n].iloc[0]
@@ -241,7 +232,6 @@ def calc(n, t, d, m):
             res.append({'Incluir': True, 'Descrição': desc, 'Grupo': grp, 'Qtd': i['Qtd'], 'Custo Unit': cust, 'Venda Unit': uv, 'Total Venda': uv*i['Qtd'], 'Total Custo': cust*i['Qtd']})
         return pd.DataFrame(res)
     except Exception as e:
-        # print(e) # Debug
         return None
 
 # ==============================================================================
@@ -253,12 +243,16 @@ with tabs[0]:
     st.title("Gerador de Propostas")
     
     if db["Config_Vasos"].empty:
-        st.error("⚠️ Não foi possível carregar os dados da Nuvem. Verifique a configuração dos Segredos.")
+        st.error("⚠️ Conexão estabelecida, mas as tabelas estão vazias. Verifique se você colou os dados CSV na Planilha Google.")
     else:
         c1, c2, c3 = st.columns(3)
         nv = c1.selectbox("Vasos", [1,2,3,4], index=3, key="sel_vasos")
-        tv = c2.selectbox("Tamanho", db["Config_Vasos"]['Descricao_Vaso'].unique(), index=3, key="sel_tam")
-        dt = c3.selectbox("Diâmetro", db["Config_Hidraulica"]['ID_Diametro_mm'].unique(), index=1, key="sel_dia")
+        # Garante que existem opções antes de criar o selectbox
+        opts_t = db["Config_Vasos"]['Descricao_Vaso'].unique() if not db["Config_Vasos"].empty else []
+        tv = c2.selectbox("Tamanho", opts_t, index=3 if len(opts_t)>3 else 0, key="sel_tam")
+        
+        opts_d = db["Config_Hidraulica"]['ID_Diametro_mm'].unique() if not db["Config_Hidraulica"].empty else []
+        dt = c3.selectbox("Diâmetro", opts_d, index=1 if len(opts_d)>1 else 0, key="sel_dia")
         
         st.divider()
         with st.expander("⚙️ Margens (%)", expanded=True):
@@ -274,7 +268,7 @@ with tabs[0]:
             }
         
         df = calc(nv, tv, dt, m)
-        if df is None: st.warning("Combinação não encontrada ou dados incompletos.")
+        if df is None: st.warning("Configuração incompleta na planilha. Verifique as abas Config.")
         else:
             st.divider()
             edited = st.data_editor(df, column_config={"Incluir": st.column_config.CheckboxColumn(width="small"), "Custo Unit": st.column_config.NumberColumn(format="R$ %.2f"), "Venda Unit": st.column_config.NumberColumn(format="R$ %.2f"), "Total Venda": st.column_config.NumberColumn(format="R$ %.2f")}, disabled=["Descrição", "Grupo", "Qtd", "Custo Unit", "Venda Unit", "Total Venda"], hide_index=True, use_container_width=True, key="main_edit")
@@ -313,53 +307,57 @@ with tabs[0]:
 if st.session_state.admin_logged_in:
     with tabs[1]:
         st.header("🛠️ Kits (Salva no Google Sheets)")
-        kits_disp = sorted(db["Kits"]['ID_Kit'].unique())
+        kits_disp = sorted(db["Kits"]['ID_Kit'].unique()) if not db["Kits"].empty else []
         c_k1, c_k2 = st.columns([2, 1])
-        k_sel = c_k1.selectbox("Selecione:", kits_disp, key="sel_kit_a")
-        novo_k = c_k2.text_input("Novo Kit:", key="new_kit_a")
-        if c_k2.button("Criar", key="btn_new_kit"):
-            if novo_k not in kits_disp:
-                # Adiciona localmente e salva na nuvem
-                new_row = pd.DataFrame({'ID_Kit':[novo_k], 'ID_Material':[''], 'Quantidade':[0]})
-                db["Kits"] = pd.concat([db["Kits"], new_row], ignore_index=True)
-                save_data_to_sheets("Kits", db["Kits"])
-                st.rerun()
-        if novo_k in kits_disp: k_sel = novo_k
+        if kits_disp:
+            k_sel = c_k1.selectbox("Selecione:", kits_disp, key="sel_kit_a")
+        else:
+            k_sel = None
+            c_k1.warning("Nenhum kit encontrado.")
 
-        df_k = db["Kits"][db["Kits"]['ID_Kit'] == k_sel].copy()
-        df_v = pd.merge(df_k, db["Materiais"][['ID_Material', 'Descricao']], on='ID_Material', how='left')
-        
-        st.subheader(f"Itens: {k_sel}")
-        st.info("Para remover, selecione a linha e pressione DELETE.")
-        
-        df_ed = st.data_editor(
-            df_v[['ID_Material', 'Descricao', 'Quantidade']],
-            column_config={
-                "ID_Material": st.column_config.TextColumn(disabled=True),
-                "Descricao": st.column_config.TextColumn(disabled=True),
-                "Quantidade": st.column_config.NumberColumn(min_value=0.0)
-            }, num_rows="dynamic", key="ked", use_container_width=True
-        )
-        
-        if st.button("💾 Salvar Alterações na Nuvem", key="btn_save_cloud"):
-            db["Kits"] = db["Kits"][db["Kits"]['ID_Kit'] != k_sel] # Remove antigo
-            n = df_ed.copy(); n['ID_Kit'] = k_sel; n = n[n['ID_Material'] != '']
-            db["Kits"] = pd.concat([db["Kits"], n[['ID_Kit', 'ID_Material', 'Quantidade']]], ignore_index=True)
-            save_data_to_sheets("Kits", db["Kits"]) # Salva na nuvem
-            st.rerun()
-            
-        st.divider()
-        st.markdown("#### ➕ Adicionar Material")
-        ca1, ca2, ca3 = st.columns([3, 1, 1])
-        opts = db["Materiais"].apply(lambda x: f"{x['Descricao']} | {x['ID_Material']}", axis=1)
-        add_itm = ca1.selectbox("Item:", opts, key="add_itm_sel")
-        add_qtd = ca2.number_input("Qtd:", 1.0, key="add_qtd_num")
-        if ca3.button("Adicionar", key="btn_add_k"):
-            id_add = add_itm.split(" | ")[-1]
-            new_row = pd.DataFrame({'ID_Kit':[k_sel], 'ID_Material':[id_add], 'Quantidade':[add_qtd]})
+        novo_k = c_k2.text_input("Novo Kit:", key="new_kit_a")
+        if c_k2.button("Criar", key="btn_new_kit") and novo_k:
+            new_row = pd.DataFrame({'ID_Kit':[novo_k], 'ID_Material':[''], 'Quantidade':[0]})
             db["Kits"] = pd.concat([db["Kits"], new_row], ignore_index=True)
             save_data_to_sheets("Kits", db["Kits"])
             st.rerun()
+        
+        if k_sel:
+            if novo_k in kits_disp: k_sel = novo_k
+            df_k = db["Kits"][db["Kits"]['ID_Kit'] == k_sel].copy()
+            df_v = pd.merge(df_k, db["Materiais"][['ID_Material', 'Descricao']], on='ID_Material', how='left')
+            
+            st.subheader(f"Itens: {k_sel}")
+            st.info("Para remover, selecione a linha e pressione DELETE.")
+            
+            df_ed = st.data_editor(
+                df_v[['ID_Material', 'Descricao', 'Quantidade']],
+                column_config={
+                    "ID_Material": st.column_config.TextColumn(disabled=True),
+                    "Descricao": st.column_config.TextColumn(disabled=True),
+                    "Quantidade": st.column_config.NumberColumn(min_value=0.0)
+                }, num_rows="dynamic", key="ked", use_container_width=True
+            )
+            
+            if st.button("💾 Salvar Alterações na Nuvem", key="btn_save_cloud"):
+                db["Kits"] = db["Kits"][db["Kits"]['ID_Kit'] != k_sel] 
+                n = df_ed.copy(); n['ID_Kit'] = k_sel; n = n[n['ID_Material'] != '']
+                db["Kits"] = pd.concat([db["Kits"], n[['ID_Kit', 'ID_Material', 'Quantidade']]], ignore_index=True)
+                save_data_to_sheets("Kits", db["Kits"])
+                st.rerun()
+                
+            st.divider()
+            st.markdown("#### ➕ Adicionar Material")
+            ca1, ca2, ca3 = st.columns([3, 1, 1])
+            opts = db["Materiais"].apply(lambda x: f"{x['Descricao']} | {x['ID_Material']}", axis=1)
+            add_itm = ca1.selectbox("Item:", opts, key="add_itm_sel")
+            add_qtd = ca2.number_input("Qtd:", 1.0, key="add_qtd_num")
+            if ca3.button("Adicionar", key="btn_add_k"):
+                id_add = add_itm.split(" | ")[-1]
+                new_row = pd.DataFrame({'ID_Kit':[k_sel], 'ID_Material':[id_add], 'Quantidade':[add_qtd]})
+                db["Kits"] = pd.concat([db["Kits"], new_row], ignore_index=True)
+                save_data_to_sheets("Kits", db["Kits"])
+                st.rerun()
 
     with tabs[2]:
         st.header("🗃️ Banco de Dados (Nuvem)")
