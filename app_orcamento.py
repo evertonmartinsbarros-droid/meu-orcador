@@ -30,7 +30,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. CONEXÃO COM GOOGLE SHEETS (CORRIGIDA)
+# 2. CONEXÃO COM GOOGLE SHEETS
 # ==============================================================================
 SHEET_TABS = {
     "Materiais": "db_materiais",
@@ -44,7 +44,7 @@ SHEET_TABS = {
 DEFAULT_DATA = {
     "Materiais": {'ID_Material': ['CLP-PADRAO'], 'Descricao': ['Material Exemplo'], 'Grupo_Orcamento': ['Geral'], 'Preco_Custo': [100.0]},
     "Kits": {'ID_Kit': [], 'ID_Material': [], 'Quantidade': []},
-    "Config_Vasos": pd.DataFrame(), # Fallback vazio para evitar erro de chave
+    "Config_Vasos": pd.DataFrame(),
     "Config_Hidraulica": pd.DataFrame(),
     "Config_Acionamentos": pd.DataFrame()
 }
@@ -52,7 +52,7 @@ DEFAULT_DATA = {
 def get_google_connection():
     """Conecta ao Google Sheets usando st.secrets"""
     try:
-        # --- AQUI ESTAVA O ERRO: FALTAVA O ESCOPO DO DRIVE ---
+        # Escopos necessários (Sheets + Drive)
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
@@ -69,7 +69,6 @@ def get_google_connection():
 @st.cache_data(ttl=60)
 def load_data_from_sheets():
     client = get_google_connection()
-    # Se falhar a conexão, retorna dados vazios seguros para não quebrar o app
     if not client: return {k: pd.DataFrame(v) if isinstance(v, dict) else v for k,v in DEFAULT_DATA.items()}
     
     dataframes = {}
@@ -247,7 +246,7 @@ with tabs[0]:
     else:
         c1, c2, c3 = st.columns(3)
         nv = c1.selectbox("Vasos", [1,2,3,4], index=3, key="sel_vasos")
-        # Garante que existem opções antes de criar o selectbox
+        
         opts_t = db["Config_Vasos"]['Descricao_Vaso'].unique() if not db["Config_Vasos"].empty else []
         tv = c2.selectbox("Tamanho", opts_t, index=3 if len(opts_t)>3 else 0, key="sel_tam")
         
@@ -362,7 +361,9 @@ if st.session_state.admin_logged_in:
     with tabs[2]:
         st.header("🗃️ Banco de Dados (Nuvem)")
         st.info("⚠️ Qualquer alteração aqui reflete na Planilha Google.")
-        t = st.selectbox("Tabela", list(FILES.keys()), key="sel_tab_cloud")
+        # --- AQUI ESTAVA O ERRO DE NAME ERROR ---
+        # CORRIGIDO: usando SHEET_TABS.keys() em vez de FILES.keys()
+        t = st.selectbox("Tabela", list(SHEET_TABS.keys()), key="sel_tab_cloud")
         
         ed = st.data_editor(db[t], num_rows="dynamic", use_container_width=True, key="cloud_editor")
         
