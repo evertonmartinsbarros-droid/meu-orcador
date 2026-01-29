@@ -141,7 +141,7 @@ def save_to_drive_silent(file_bytes, filename, mime_type):
         file_metadata = {
             'name': filename,
             # Se quiser salvar numa pasta específica, descomente a linha abaixo e ponha o ID da pasta
-            # 'parents': ['ID_DA_SUA_PASTA_NO_DRIVE'] 
+             'parents': ['1IIPgPCzHI5osKtPQYIHb6baGDNE64gew'] 
         }
         
         media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type)
