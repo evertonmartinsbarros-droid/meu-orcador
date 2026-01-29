@@ -6,6 +6,7 @@ gspread
 google-auth
 xlsxwriter
 Pillow
+google-api-python-client
 
 
 
