@@ -9,6 +9,9 @@ from google.oauth2.service_account import Credentials
 import io
 import base64
 from PIL import Image
+# --- NOVAS IMPORTAÇÕES PARA O DRIVE ---
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 
 # --- SEGURANÇA PLOTLY ---
 try:
@@ -83,7 +86,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. CONEXÃO COM GOOGLE SHEETS
+# 2. CONEXÃO COM GOOGLE SHEETS E DRIVE
 # ==============================================================================
 SHEET_TABS = {
     "Materiais": "db_materiais",
@@ -108,16 +111,47 @@ DEFAULT_DATA = {
     }])
 }
 
+def get_creds():
+    """Retorna credenciais para uso geral"""
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    # Adicionamos escopo total do Drive para permitir upload de arquivos
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    return Credentials.from_service_account_info(creds_dict, scopes=scopes)
+
 def get_google_connection():
     try:
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        creds = get_creds()
         client = gspread.authorize(creds)
         return client
     except Exception as e:
         st.error(f"Erro na conexão com Google: {e}")
         return None
+
+# --- NOVA FUNÇÃO: SALVAR NO DRIVE SILENCIOSAMENTE ---
+def save_to_drive_silent(file_bytes, filename, mime_type):
+    """Salva uma cópia do arquivo no Google Drive sem avisar o usuário"""
+    try:
+        creds = get_creds()
+        # Constrói o serviço da API do Drive v3
+        service = build('drive', 'v3', credentials=creds)
+        
+        file_metadata = {
+            'name': filename,
+            # Se quiser salvar numa pasta específica, descomente a linha abaixo e ponha o ID da pasta
+            # 'parents': ['ID_DA_SUA_PASTA_NO_DRIVE'] 
+        }
+        
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type)
+        
+        # Executa o upload
+        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        # Se chegou aqui, salvou com sucesso. Não fazemos nada (silencioso).
+    except Exception as e:
+        # Se der erro, apenas printamos no console do servidor para debug, sem alertar o usuário
+        print(f"Erro ao fazer backup no Drive: {e}")
 
 @st.cache_data(ttl=60)
 def load_data_from_sheets():
@@ -427,6 +461,7 @@ with tabs[0]:
             col_pdf, col_xls = st.columns(2)
             
             with col_pdf:
+                # Lógica do PDF
                 if st.button("📄 PDF Proposta", type="primary", key="btn_pdf", use_container_width=True):
                     logo_bytes = base64_to_image(str(config_row.get("Logo_Base64", "")))
                     pdf = PropostaPDF({'nome':config_row.get("Empresa_Nome", ""), 
@@ -437,11 +472,22 @@ with tabs[0]:
                                       {'nome':cn, 'projeto':cp, 'validade':cv, 'prazo':cpr, 'pagamento':cpg}, logo_bytes)
                     pdf.add_page(); pdf.chapter_info(); pdf.chapter_tab(fin); pdf.chapter_end()
                     pf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf"); pdf.output(pf.name)
-                    with open(pf.name, "rb") as f: st.download_button("📥 Baixar PDF", f, f"Proposta_{cn}.pdf", mime="application/pdf", key="dl_pdf_real", type="secondary", use_container_width=True)
+                    
+                    # --- BACKUP NO DRIVE (PDF) ---
+                    with open(pf.name, "rb") as f:
+                        file_data = f.read()
+                        save_to_drive_silent(file_data, f"Proposta_{cn}.pdf", "application/pdf")
+                    
+                    # --- BOTÃO DE DOWNLOAD ---
+                    with open(pf.name, "rb") as f:
+                         st.download_button("📥 Baixar PDF", f, f"Proposta_{cn}.pdf", mime="application/pdf", key="dl_pdf_real", type="secondary", use_container_width=True)
             
             with col_xls:
-                excel_data = convert_df_to_excel(fin)
-                st.download_button("📥 Baixar Excel", excel_data, f"Orcamento_{cn}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+                # Lógica do Excel (gera os bytes, salva no Drive, depois mostra botão)
+                excel_bytes = convert_df_to_excel(fin)
+                save_to_drive_silent(excel_bytes, f"Orcamento_{cn}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                
+                st.download_button("📥 Baixar Excel", excel_bytes, f"Orcamento_{cn}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
 if st.session_state.admin_logged_in:
     with tabs[1]:
