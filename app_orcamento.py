@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 import io
 import base64
 from PIL import Image
-# --- IMPORTAÇÕES PARA O DRIVE ---
+# --- NOVAS IMPORTAÇÕES PARA O DRIVE ---
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -130,9 +130,9 @@ def get_google_connection():
         st.error(f"Erro na conexão com Google: {e}")
         return None
 
-# --- FUNÇÃO DE BACKUP COM DEBUG ATIVADO ---
+# --- NOVA FUNÇÃO: SALVAR NO DRIVE SILENCIOSAMENTE ---
 def save_to_drive_silent(file_bytes, filename, mime_type):
-    """Salva uma cópia do arquivo no Google Drive e mostra erro se falhar"""
+    """Salva uma cópia do arquivo no Google Drive sem avisar o usuário"""
     try:
         creds = get_creds()
         # Constrói o serviço da API do Drive v3
@@ -140,19 +140,18 @@ def save_to_drive_silent(file_bytes, filename, mime_type):
         
         file_metadata = {
             'name': filename,
-            'parents': ['1IIPgPCzHI5osKtPQYIHb6baGDNE64gew'] # SEU ID DA PASTA
+            # Se quiser salvar numa pasta específica, descomente a linha abaixo e ponha o ID da pasta
+            # 'parents': ['ID_DA_SUA_PASTA_NO_DRIVE'] 
         }
         
-        # Prepara o arquivo na memória
-        fh = io.BytesIO(file_bytes)
-        media = MediaIoBaseUpload(fh, mimetype=mime_type, resumable=True)
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type)
         
         # Executa o upload
         service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-        
+        # Se chegou aqui, salvou com sucesso. Não fazemos nada (silencioso).
     except Exception as e:
-        # AQUI ESTAVA O ERRO DE INDENTAÇÃO - AGORA ESTÁ CORRIGIDO
-        st.error(f"ERRO AO SALVAR NO DRIVE: {e}")
+        # Se der erro, apenas printamos no console do servidor para debug, sem alertar o usuário
+        print(f"Erro ao fazer backup no Drive: {e}")
 
 @st.cache_data(ttl=60)
 def load_data_from_sheets():
@@ -462,6 +461,7 @@ with tabs[0]:
             col_pdf, col_xls = st.columns(2)
             
             with col_pdf:
+                # Lógica do PDF
                 if st.button("📄 PDF Proposta", type="primary", key="btn_pdf", use_container_width=True):
                     logo_bytes = base64_to_image(str(config_row.get("Logo_Base64", "")))
                     pdf = PropostaPDF({'nome':config_row.get("Empresa_Nome", ""), 
