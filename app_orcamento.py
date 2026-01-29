@@ -151,8 +151,8 @@ def save_to_drive_silent(file_bytes, filename, mime_type):
         # Se chegou aqui, salvou com sucesso. Não fazemos nada (silencioso).
     except Exception as e:
         # Se der erro, apenas printamos no console do servidor para debug, sem alertar o usuário
-        print(f"Erro ao fazer backup no Drive: {e}")
-
+       # print(f"Erro ao fazer backup no Drive: {e}")
+st.error(f"ERRO DRIVE: {e}") # Assim vamos ver o que está acontecendo
 @st.cache_data(ttl=60)
 def load_data_from_sheets():
     client = get_google_connection()
